@@ -649,6 +649,119 @@ static esp_err_t win_handler(httpd_req_t *req) {
   return httpd_resp_send(req, NULL, 0);
 }
 
+// ── GALERÍA DE FOTOS ──────────────────────────────────────────────
+#include <dirent.h>
+#include <stdio.h>
+#define SD_MOUNT "/sdcard"
+
+static esp_err_t fotos_handler(httpd_req_t *req) {
+  httpd_resp_set_type(req, "text/html");
+  httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+
+  const char *head =
+    "<!DOCTYPE html><html><head><meta charset='utf-8'>"
+    "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+    "<title>Fotos SD</title>"
+    "<style>"
+    "body{background:#111;color:#eee;font-family:sans-serif;margin:0;padding:10px}"
+    "h2{text-align:center;color:#4af}"
+    ".grid{display:flex;flex-wrap:wrap;gap:10px;justify-content:center}"
+    ".card{background:#222;border-radius:8px;overflow:hidden;width:200px}"
+    ".card img{width:200px;height:150px;object-fit:cover;display:block}"
+    ".card p{margin:4px 8px;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}"
+    ".card a{display:block;text-align:center;padding:4px;background:#4af;color:#000;"
+            "text-decoration:none;font-size:12px;font-weight:bold}"
+    ".back{display:block;text-align:center;margin:10px;color:#4af}"
+    "</style></head><body>"
+    "<h2>&#128247; Fotos en SD</h2>"
+    "<a class='back' href='/'>&#8592; Volver a la camara</a>"
+    "<div class='grid'>";
+
+  httpd_resp_sendstr_chunk(req, head);
+
+  DIR *dir = opendir(SD_MOUNT);
+  if (!dir) {
+    httpd_resp_sendstr_chunk(req, "<p style='text-align:center;width:100%'>No se pudo leer la SD</p>");
+  } else {
+    struct dirent *entry;
+    int count = 0;
+    while ((entry = readdir(dir)) != NULL) {
+      if (entry->d_type == DT_REG) {
+        const char *name = entry->d_name;
+        size_t len = strlen(name);
+        // Verificar extension .jpg o .jpeg (case insensitive)
+        bool is_jpg = (len > 4 && strcasecmp(name + len - 4, ".jpg") == 0) ||
+                      (len > 5 && strcasecmp(name + len - 5, ".jpeg") == 0);
+        if (is_jpg) {
+          count++;
+          char card[600];
+          snprintf(card, sizeof(card),
+            "<div class='card'>"
+            "<a href='/foto?name=%s' target='_blank'>"
+            "<img src='/foto?name=%s' loading='lazy'></a>"
+            "<p>%s</p>"
+            "<a href='/foto?name=%s' download='%s'>&#11015; Descargar</a>"
+            "</div>",
+            name, name, name, name, name);
+          httpd_resp_sendstr_chunk(req, card);
+        }
+      }
+    }
+    closedir(dir);
+    if (count == 0) {
+      httpd_resp_sendstr_chunk(req,
+        "<p style='text-align:center;width:100%'>"
+        "No hay fotos aun. Presiona el boton para tomar una.</p>");
+    }
+  }
+
+  httpd_resp_sendstr_chunk(req, "</div></body></html>");
+  httpd_resp_sendstr_chunk(req, NULL);
+  return ESP_OK;
+}
+
+static esp_err_t foto_handler(httpd_req_t *req) {
+  char name[128] = {0};
+  char query[256] = {0};
+
+  if (httpd_req_get_url_query_str(req, query, sizeof(query)) != ESP_OK) {
+    httpd_resp_send_404(req); return ESP_FAIL;
+  }
+  if (httpd_query_key_value(query, "name", name, sizeof(name)) != ESP_OK) {
+    httpd_resp_send_404(req); return ESP_FAIL;
+  }
+
+  char path[256];
+  snprintf(path, sizeof(path), "%s/%s", SD_MOUNT, name);
+
+  FILE *f = fopen(path, "rb");
+  if (!f) {
+    httpd_resp_send_404(req); return ESP_FAIL;
+  }
+
+  httpd_resp_set_type(req, "image/jpeg");
+  httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+
+  // ← CAMBIO CLAVE: heap en lugar de stack
+  uint8_t *buf = (uint8_t *)malloc(4096);
+  if (!buf) {
+    fclose(f);
+    httpd_resp_send_500(req);
+    return ESP_FAIL;
+  }
+
+  size_t rb;
+  while ((rb = fread(buf, 1, 4096, f)) > 0) {
+    if (httpd_resp_send_chunk(req, (const char *)buf, rb) != ESP_OK) {
+      break;
+    }
+  }
+  free(buf);
+  fclose(f);
+  httpd_resp_send_chunk(req, NULL, 0);
+  return ESP_OK;
+}// ─────────────────────────────────────────────────────────────────
+
 static esp_err_t index_handler(httpd_req_t *req) {
   httpd_resp_set_type(req, "text/html");
   httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
@@ -669,7 +782,7 @@ static esp_err_t index_handler(httpd_req_t *req) {
 
 void startCameraServer() {
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-  config.max_uri_handlers = 16;
+  config.max_uri_handlers = 18;
 
   httpd_uri_t index_uri = {
     .uri = "/",
@@ -814,6 +927,32 @@ void startCameraServer() {
 #endif
   };
 
+  httpd_uri_t fotos_uri = {
+    .uri = "/fotos",
+    .method = HTTP_GET,
+    .handler = fotos_handler,
+    .user_ctx = NULL
+#ifdef CONFIG_HTTPD_WS_SUPPORT
+    ,
+    .is_websocket = true,
+    .handle_ws_control_frames = false,
+    .supported_subprotocol = NULL
+#endif
+  };
+
+  httpd_uri_t foto_uri = {
+    .uri = "/foto",
+    .method = HTTP_GET,
+    .handler = foto_handler,
+    .user_ctx = NULL
+#ifdef CONFIG_HTTPD_WS_SUPPORT
+    ,
+    .is_websocket = true,
+    .handle_ws_control_frames = false,
+    .supported_subprotocol = NULL
+#endif
+  };
+
   ra_filter_init(&ra_filter, 20);
 
   log_i("Starting web server on port: '%d'", config.server_port);
@@ -829,6 +968,8 @@ void startCameraServer() {
     httpd_register_uri_handler(camera_httpd, &greg_uri);
     httpd_register_uri_handler(camera_httpd, &pll_uri);
     httpd_register_uri_handler(camera_httpd, &win_uri);
+    httpd_register_uri_handler(camera_httpd, &fotos_uri);
+    httpd_register_uri_handler(camera_httpd, &foto_uri);
   }
 
   config.server_port += 1;
