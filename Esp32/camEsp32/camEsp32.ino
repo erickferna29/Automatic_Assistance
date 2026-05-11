@@ -17,6 +17,10 @@
 const char *ssid     = "LL2004_2.4";
 const char *password = "Ab982076522";
 
+
+//const char *ssid= "Erickferna29";
+//const char *password = "Fer292929";
+
 void startCameraServer();
 void setupLedFlash();
 
