@@ -197,7 +197,7 @@ void do_capture() {
     Serial.println("OK!");
   }
 WiFiClient client;
-const char* server_ip = ipctual;
+const char* server_ip = ipActual;
 int server_port = 8085; // Puerto de tu contenedor Apache/PHP
 
 if (client.connect(server_ip, server_port)) {
