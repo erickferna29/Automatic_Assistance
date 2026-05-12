@@ -5,4 +5,4 @@ RUN apt-get update && apt-get install -y \
     pip install face_recognition fastapi uvicorn python-multipart
 WORKDIR /app
 COPY app.py .
-CMD ["uvicorn", "app.py:app", "--host", "0.0.0.0", "--port", "5001"]
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "5001"]

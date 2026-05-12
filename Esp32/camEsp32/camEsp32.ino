@@ -27,7 +27,7 @@ const char *password = "Mp7FhGKrRs";
 //const char *password = "Er12121212";
 
 //Cambia a la ip asignada d ela pc actual
-const char *ipActual = "";
+const char *ipActual = "172.27.208.1";
 
 
 void startCameraServer();
@@ -197,7 +197,7 @@ void do_capture() {
     Serial.println("OK!");
   }
 WiFiClient client;
-const char* server_ip = ipActual;
+const char* server_ip = ipctual;
 int server_port = 8085; // Puerto de tu contenedor Apache/PHP
 
 if (client.connect(server_ip, server_port)) {
