@@ -14,12 +14,17 @@
 // ===========================
 // Enter your WiFi credentials
 // ===========================
-const char *ssid     = "LL2004_2.4";
-const char *password = "Ab982076522";
+// ── Red de Chamba ──────────────────────
+const char *ssid     = "INFINITUM5DE6_2.4";
+const char *password = "Mp7FhGKrRs";
 
+// ── Red de casa ──────────────────────
+//const char *ssid     = "LL2004_2.4";
+//const char *password = "Ab982076522";
 
-//const char *ssid= "Erickferna29";
-//const char *password = "Fer292929";
+// ── Hotspot del celular ───────────────
+//const char *ssid     = "Erickferna29";
+//const char *password = "Er12121212";
 
 void startCameraServer();
 void setupLedFlash();
@@ -141,10 +146,7 @@ void setup() {
   pinMode(BUTTON_PIN, INPUT_PULLUP);
 
   // ── WiFi ─────────────────────────────────────────────────
-  IPAddress local_IP(192, 168, 1, 73);
-  IPAddress gateway(192, 168, 1, 1);
-  IPAddress subnet(255, 255, 255, 0);
-  WiFi.config(local_IP, gateway, subnet);
+  // Sin IP estatica - DHCP funciona en cualquier red/hotspot
   WiFi.begin(ssid, password);
   WiFi.setTxPower(WIFI_POWER_8_5dBm);
   WiFi.setSleep(false);
@@ -209,3 +211,4 @@ void loop() {
   }
   delay(10);
 }
+
