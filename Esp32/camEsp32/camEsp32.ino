@@ -26,6 +26,10 @@ const char *password = "Mp7FhGKrRs";
 //const char *ssid     = "Erickferna29";
 //const char *password = "Er12121212";
 
+//Cambia a la ip asignada d ela pc actual
+const char *ipActual = "";
+
+
 void startCameraServer();
 void setupLedFlash();
 
@@ -192,8 +196,36 @@ void do_capture() {
     fclose(f);
     Serial.println("OK!");
   }
+WiFiClient client;
+const char* server_ip = ipActual;
+int server_port = 8085; // Puerto de tu contenedor Apache/PHP
 
-  esp_camera_fb_return(fb);
+if (client.connect(server_ip, server_port)) {
+    Serial.println("Enviando al servidor...");
+    
+    client.println("POST /comparar_rostro.php HTTP/1.1");
+    client.println("Host: " + String(server_ip));
+    client.println("Content-Type: image/jpeg");
+    client.print("Content-Length: ");
+    client.println(fb->len);
+    client.println("Connection: close");
+    client.println();
+    
+    // Enviar los bytes de la imagen directamente
+    client.write(fb->buf, fb->len);
+    
+    while (client.connected()) {
+        String line = client.readStringUntil('\n');
+        if (line == "\r") break;
+    }
+    String response = client.readString();
+    Serial.println("Respuesta: " + response);
+    client.stop();
+} else {
+    Serial.println("Fallo conexion al servidor");
+}
+
+esp_camera_fb_return(fb);
 }
 // ────────────────────────────────────────────────────────────────
 
