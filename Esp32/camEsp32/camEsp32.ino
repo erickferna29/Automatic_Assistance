@@ -27,8 +27,7 @@ const char *password = "Mp7FhGKrRs";
 //const char *password = "Er12121212";
 
 //Cambia a la ip asignada d ela pc actual
-const char *ipActual = "172.27.208.1";
-
+const char *ipActual = "192.168.1.73";
 
 void startCameraServer();
 void setupLedFlash();
@@ -171,11 +170,10 @@ void setup() {
 
 // ── Captura y guarda foto en SD ──────────────────────────────────
 void do_capture() {
-  // Descartar frames viejos del buffer
+  // 1. Limpiar buffer y capturar frame fresco
   camera_fb_t *fb = esp_camera_fb_get();
   esp_camera_fb_return(fb);
   delay(100);
-  // Tomar el frame fresco
   fb = esp_camera_fb_get();
   
   if (!fb || fb->len == 0) {
@@ -184,48 +182,69 @@ void do_capture() {
     return;
   }
 
+  // 2. Guardar en SD (para tener respaldo local)
   char path[64];
   snprintf(path, sizeof(path), "/sdcard/foto_%lu.jpg", millis());
-  Serial.printf("Guardando: %s (%zu bytes)\n", path, fb->len);
-
   FILE *f = fopen(path, "wb");
-  if (!f) {
-    Serial.println("ERROR: No se pudo abrir archivo.");
-  } else {
+  if (f) {
     fwrite(fb->buf, 1, fb->len, f);
     fclose(f);
-    Serial.println("OK!");
+    Serial.printf("Guardado en SD: %s\n", path);
   }
-WiFiClient client;
-const char* server_ip = ipActual;
-int server_port = 8085; // Puerto de tu contenedor Apache/PHP
 
-if (client.connect(server_ip, server_port)) {
-    Serial.println("Enviando al servidor...");
-    
-    client.println("POST /comparar_rostro.php HTTP/1.1");
-    client.println("Host: " + String(server_ip));
-    client.println("Content-Type: image/jpeg");
+  // 3. Enviar al Servidor (FastAPI)
+  WiFiClient client;
+  int server_port = 5001;
+
+  if (client.connect(ipActual, server_port)) {
+    Serial.println("Conectado! Armando paquete Multipart...");
+
+    // Estructura del formulario para que FastAPI reconozca el campo "foto"
+    String boundary = "--------------------------1234567890";
+    String head = "--" + boundary + "\r\n";
+    head += "Content-Disposition: form-data; name=\"foto\"; filename=\"foto.jpg\"\r\n";
+    head += "Content-Type: image/jpeg\r\n\r\n";
+    String tail = "\r\n--" + boundary + "--\r\n";
+
+    uint32_t totalLen = head.length() + fb->len + tail.length();
+
+    // Enviando encabezados HTTP
+    client.println("POST /comparar HTTP/1.1");
+    client.println("Host: " + String(ipActual));
+    client.println("Content-Type: multipart/form-data; boundary=" + boundary);
     client.print("Content-Length: ");
-    client.println(fb->len);
+    client.println(totalLen);
     client.println("Connection: close");
-    client.println();
-    
-    // Enviar los bytes de la imagen directamente
-    client.write(fb->buf, fb->len);
-    
-    while (client.connected()) {
-        String line = client.readStringUntil('\n');
-        if (line == "\r") break;
-    }
-    String response = client.readString();
-    Serial.println("Respuesta: " + response);
-    client.stop();
-} else {
-    Serial.println("Fallo conexion al servidor");
-}
+    client.println(); // Línea obligatoria
 
-esp_camera_fb_return(fb);
+    // Enviando el cuerpo del mensaje por partes
+    client.print(head);             // Cabecera del archivo
+    client.write(fb->buf, fb->len);  // La imagen real (bytes)
+    client.print(tail);             // Cierre del formulario
+
+    Serial.println("Enviado. Esperando respuesta de Face Recognition...");
+
+    // 4. Leer respuesta con timeout extendido (la comparación es lenta)
+    unsigned long timeout = millis();
+    while (client.available() == 0) {
+      if (millis() - timeout > 15000) { // 15 segundos
+        Serial.println(">>> Timeout: El servidor tardó mucho en comparar.");
+        client.stop();
+        esp_camera_fb_return(fb);
+        return;
+      }
+    }
+
+    String response = client.readString();
+    Serial.println("---------- RESPUESTA ----------");
+    Serial.println(response);
+    Serial.println("-------------------------------");
+    client.stop();
+  } else {
+    Serial.println("Fallo conexion al servidor (Verifica IP/Puerto/Firewall)");
+  }
+
+  esp_camera_fb_return(fb);
 }
 // ────────────────────────────────────────────────────────────────
 
