@@ -1,0 +1,38 @@
+version: '3.8'
+name: sistema_asistencia_unificado
+
+services:
+  db_asistencia:
+    image: mariadb:10.11
+    container_name: Asistencia_db
+    environment:
+      MYSQL_ROOT_PASSWORD: 1234
+      MYSQL_DATABASE: Automatic_Asistance
+    ports:
+      - "3306:3306"
+    volumes:
+      - asistencia_db_data:/var/lib/mysql
+      # Esto inyecta el SQL de tu compa para que MariaDB cree las tablas solito al arrancar
+      - ./Database:/docker-entrypoint-initdb.d 
+
+  api_principal:
+    build: .
+    container_name: Asistencia_main
+    ports:
+      - "8050:8000"
+    depends_on:
+      - db_asistencia
+      - face_recognition
+
+  face_recognition:
+    build: ./face_service
+    container_name: Asistencia_face
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./fotos_alumnos:/app/fotos_alumnos
+    depends_on:
+      - db_asistencia
+
+volumes:
+  asistencia_db_data:
