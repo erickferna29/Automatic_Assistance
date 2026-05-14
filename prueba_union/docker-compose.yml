@@ -1,10 +1,9 @@
-version: '3.8'
 name: sistema_asistencia_unificado
 
 services:
   db_asistencia:
     image: mariadb:10.11
-    container_name: Asistencia_db
+    container_name: Asistencias_db
     environment:
       MYSQL_ROOT_PASSWORD: 1234
       MYSQL_DATABASE: Automatic_Asistance
@@ -33,6 +32,31 @@ services:
       - ./fotos_alumnos:/app/fotos_alumnos
     depends_on:
       - db_asistencia
+  pma_asistencia:
+    image: phpmyadmin/phpmyadmin
+    container_name: Asistencia_pma
+    restart: always
+    environment:
+      PMA_HOST: db_asistencia
+      PMA_PORT: 3306
+      PMA_ARBITRARY: 1
+      UPLOAD_LIMIT: 64M
+    ports:
+      - "8084:80" 
+    depends_on:
+      - db_asistencia
 
+  apache_asistencia:
+    image: php:8.2-apache
+    container_name: Asistencia_backend
+    restart: always
+    ports:
+      - "8085:80" 
+    volumes:
+      - ./:/var/www/html
+    depends_on:
+      - db_asistencia
+    command: >
+      bash -c "docker-php-ext-install mysqli && apache2-foreground"
 volumes:
   asistencia_db_data:
