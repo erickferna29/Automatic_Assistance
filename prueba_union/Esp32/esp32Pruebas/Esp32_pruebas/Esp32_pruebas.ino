@@ -27,9 +27,13 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 // ===========================
 // CONFIGURACIÓN DE RED Y SERVIDOR
 // ===========================
-const char* ssid     = "INFINITUM29DF";
-const char* password = "PF3hx2bADE";
-const char *ipActual = "192.168.1.90";
+//const char* ssid     = "INFINITUM29DF";
+//const char* password = "PF3hx2bADE";
+//const char *ipActual = "192.168.1.90";
+
+const char* ssid     = "LL2004_2.4";
+const char* password = "Ab982076522";
+const char *ipActual = "192.168.1.196";
 int server_port = 8050;
 
 // ===========================
@@ -252,10 +256,10 @@ verificarEstadoClase();
 // ===========================
 // SI NO HAY CLASE ACTIVA
 // ===========================
-if (!claseActiva) {
-delay(1000);
-return;
-}
+//if (!claseActiva) {
+//delay(1000);
+//return;
+//}
 
 Serial.println("Radar activo...");
 
@@ -274,36 +278,32 @@ Serial.println(count);
 for (int i = 0; i < count; i++) {
 BLEAdvertisedDevice dispositivo = foundDevices->getDevice(i);
 
+if (dispositivo.haveServiceUUID()) {
+      Serial.print("-> Nombre: "); Serial.print(dispositivo.getName().c_str());
+      Serial.print(" | UUID Detectado: "); Serial.println(dispositivo.getServiceUUID().toString().c_str());
+  }
 
 // ===========================
-// CAMBIO REALIZADO:
-// DEBUG PARA VER SI BLE
-// DETECTA DISPOSITIVOS
+// FILTRO CORREGIDO CON INDEXOF
 // ===========================
-Serial.println(dispositivo.toString().c_str());
-
-if (
-    dispositivo.haveServiceUUID() &&
-    dispositivo.getServiceUUID().toString() == uuid_secreto &&
-    dispositivo.haveName()
-) {
+if (dispositivo.haveServiceUUID() && 
+    dispositivo.getServiceUUID().toString().indexOf("abcd") != -1 && 
+    dispositivo.haveName()) {
 
     String idAlumno = dispositivo.getName().c_str();
 
-    // Evitar nombres vacíos
+    // Evitar nombres vacíos (Cambiado de 'return' a 'continue' para que no rompa el ciclo de los demás)
     if (idAlumno.length() == 0) {
-        return;
+        continue; 
     }
 
     Serial.println("Dispositivo autorizado detectado");
-
     Serial.print("Alumno detectado: ");
     Serial.println(idAlumno);
 
     enviarAsistencia(idAlumno);
 
     actualizarPantalla(materiaActual, alumnosPresentes, "Alumno detectado");
-
     delay(3000);
 }
 
