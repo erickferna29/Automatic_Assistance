@@ -18,7 +18,7 @@ services:
     build: .
     container_name: Asistencia_main
     ports:
-      - "8050:8000"
+      - "8050:8050"
     depends_on:
       - db_asistencia
       - face_recognition
