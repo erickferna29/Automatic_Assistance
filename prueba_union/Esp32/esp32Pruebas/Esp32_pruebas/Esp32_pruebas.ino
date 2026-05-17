@@ -256,10 +256,10 @@ verificarEstadoClase();
 // ===========================
 // SI NO HAY CLASE ACTIVA
 // ===========================
-//if (!claseActiva) {
-//delay(1000);
-//return;
-//}
+if (!claseActiva) {
+delay(1000);
+return;
+}
 
 Serial.println("Radar activo...");
 
@@ -278,32 +278,36 @@ Serial.println(count);
 for (int i = 0; i < count; i++) {
 BLEAdvertisedDevice dispositivo = foundDevices->getDevice(i);
 
-if (dispositivo.haveServiceUUID()) {
-      Serial.print("-> Nombre: "); Serial.print(dispositivo.getName().c_str());
-      Serial.print(" | UUID Detectado: "); Serial.println(dispositivo.getServiceUUID().toString().c_str());
-  }
 
 // ===========================
-// FILTRO CORREGIDO CON INDEXOF
+// CAMBIO REALIZADO:
+// DEBUG PARA VER SI BLE
+// DETECTA DISPOSITIVOS
 // ===========================
-if (dispositivo.haveServiceUUID() && 
-    dispositivo.getServiceUUID().toString().indexOf("abcd") != -1 && 
-    dispositivo.haveName()) {
+Serial.println(dispositivo.toString().c_str());
+
+if (
+    dispositivo.haveServiceUUID() &&
+    dispositivo.getServiceUUID().toString() == uuid_secreto &&
+    dispositivo.haveName()
+) {
 
     String idAlumno = dispositivo.getName().c_str();
 
-    // Evitar nombres vacíos (Cambiado de 'return' a 'continue' para que no rompa el ciclo de los demás)
+    // Evitar nombres vacíos
     if (idAlumno.length() == 0) {
-        continue; 
+        return;
     }
 
     Serial.println("Dispositivo autorizado detectado");
+
     Serial.print("Alumno detectado: ");
     Serial.println(idAlumno);
 
     enviarAsistencia(idAlumno);
 
     actualizarPantalla(materiaActual, alumnosPresentes, "Alumno detectado");
+
     delay(3000);
 }
 
