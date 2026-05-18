@@ -39,5 +39,16 @@ services:
     command: >
       bash -c "docker-php-ext-install mysqli && apache2-foreground"
 
+  face_recognition:
+      build: ./face_service
+      container_name: Asistencia_face
+      restart: always
+      ports:
+        - "5001:5001"
+      volumes:
+        - ./fotos_alumnos:/app/fotos_alumnos  
+        - ./temp_captures:/app/temp_captures     
+      depends_on:
+        - db_asistencia
 volumes:
   asistencia_db_data: 

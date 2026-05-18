@@ -14,8 +14,20 @@
 // ===========================
 // Enter your WiFi credentials
 // ===========================
-const char *ssid     = "LL2004_2.4";
-const char *password = "Ab982076522";
+// ── Red de Chamba ──────────────────────
+const char *ssid     = "INFINITUM5DE6_2.4";
+const char *password = "Mp7FhGKrRs";
+
+// ── Red de casa ──────────────────────
+//const char *ssid     = "LL2004_2.4";
+//const char *password = "Ab982076522";
+
+// ── Hotspot del celular ───────────────
+//const char *ssid     = "Erickferna29";
+//const char *password = "Er12121212";
+
+//Cambia a la ip asignada d ela pc actual
+const char *ipActual = "192.168.1.73";
 
 void startCameraServer();
 void setupLedFlash();
@@ -137,10 +149,7 @@ void setup() {
   pinMode(BUTTON_PIN, INPUT_PULLUP);
 
   // ── WiFi ─────────────────────────────────────────────────
-  IPAddress local_IP(192, 168, 1, 73);
-  IPAddress gateway(192, 168, 1, 1);
-  IPAddress subnet(255, 255, 255, 0);
-  WiFi.config(local_IP, gateway, subnet);
+  // Sin IP estatica - DHCP funciona en cualquier red/hotspot
   WiFi.begin(ssid, password);
   WiFi.setTxPower(WIFI_POWER_8_5dBm);
   WiFi.setSleep(false);
@@ -161,11 +170,10 @@ void setup() {
 
 // ── Captura y guarda foto en SD ──────────────────────────────────
 void do_capture() {
-  // Descartar frames viejos del buffer
+  // 1. Limpiar buffer y capturar frame fresco
   camera_fb_t *fb = esp_camera_fb_get();
   esp_camera_fb_return(fb);
   delay(100);
-  // Tomar el frame fresco
   fb = esp_camera_fb_get();
   
   if (!fb || fb->len == 0) {
@@ -174,17 +182,66 @@ void do_capture() {
     return;
   }
 
+  // 2. Guardar en SD (para tener respaldo local)
   char path[64];
   snprintf(path, sizeof(path), "/sdcard/foto_%lu.jpg", millis());
-  Serial.printf("Guardando: %s (%zu bytes)\n", path, fb->len);
-
   FILE *f = fopen(path, "wb");
-  if (!f) {
-    Serial.println("ERROR: No se pudo abrir archivo.");
-  } else {
+  if (f) {
     fwrite(fb->buf, 1, fb->len, f);
     fclose(f);
-    Serial.println("OK!");
+    Serial.printf("Guardado en SD: %s\n", path);
+  }
+
+  // 3. Enviar al Servidor (FastAPI)
+  WiFiClient client;
+  int server_port = 5001;
+
+  if (client.connect(ipActual, server_port)) {
+    Serial.println("Conectado! Armando paquete Multipart...");
+
+    // Estructura del formulario para que FastAPI reconozca el campo "foto"
+    String boundary = "--------------------------1234567890";
+    String head = "--" + boundary + "\r\n";
+    head += "Content-Disposition: form-data; name=\"foto\"; filename=\"foto.jpg\"\r\n";
+    head += "Content-Type: image/jpeg\r\n\r\n";
+    String tail = "\r\n--" + boundary + "--\r\n";
+
+    uint32_t totalLen = head.length() + fb->len + tail.length();
+
+    // Enviando encabezados HTTP
+    client.println("POST /comparar HTTP/1.1");
+    client.println("Host: " + String(ipActual));
+    client.println("Content-Type: multipart/form-data; boundary=" + boundary);
+    client.print("Content-Length: ");
+    client.println(totalLen);
+    client.println("Connection: close");
+    client.println(); // Línea obligatoria
+
+    // Enviando el cuerpo del mensaje por partes
+    client.print(head);             // Cabecera del archivo
+    client.write(fb->buf, fb->len);  // La imagen real (bytes)
+    client.print(tail);             // Cierre del formulario
+
+    Serial.println("Enviado. Esperando respuesta de Face Recognition...");
+
+    // 4. Leer respuesta con timeout extendido (la comparación es lenta)
+    unsigned long timeout = millis();
+    while (client.available() == 0) {
+      if (millis() - timeout > 15000) { // 15 segundos
+        Serial.println(">>> Timeout: El servidor tardó mucho en comparar.");
+        client.stop();
+        esp_camera_fb_return(fb);
+        return;
+      }
+    }
+
+    String response = client.readString();
+    Serial.println("---------- RESPUESTA ----------");
+    Serial.println(response);
+    Serial.println("-------------------------------");
+    client.stop();
+  } else {
+    Serial.println("Fallo conexion al servidor (Verifica IP/Puerto/Firewall)");
   }
 
   esp_camera_fb_return(fb);
@@ -205,3 +262,4 @@ void loop() {
   }
   delay(10);
 }
+
