@@ -1,15 +1,18 @@
 import { create } from 'zustand';
-import { obtenerAlumnos } from '../services/teacherApi';
+import { obtenerAlumnos, iniciarSesion, cerrarSesion } from '../services/teacherApi';
 import type { SessionStore, Student, SignalStatus } from '../types';
 
+// ─── Timing ──────────────────────────────────────────────────
 const SIGNAL_TICK_MS   = 1_500;
 const DECAY_TICK_MS    = 2_000;
 const ONLINE_WINDOW_MS = 5_000;
 const IDLE_WINDOW_MS   = 12_000;
 
+// ─── Interval refs (fuera del store, no son estado reactivo) ─
 let _signalInterval: ReturnType<typeof setInterval> | null = null;
 let _decayInterval:  ReturnType<typeof setInterval> | null = null;
 
+// ─── Helpers ─────────────────────────────────────────────────
 function deriveStatus(lastSignalAt: number | null): SignalStatus {
   if (lastSignalAt === null) return 'offline';
   const elapsed = Date.now() - lastSignalAt;
@@ -23,21 +26,29 @@ function clearIntervals(): void {
   if (_decayInterval  !== null) { clearInterval(_decayInterval);  _decayInterval  = null; }
 }
 
+// ─── Store ───────────────────────────────────────────────────
 export const useSessionStore = create<SessionStore>((set, get) => ({
   isSessionActive: false,
   isLoading:       false,
   error:           null,
   studentIds:      [],
   students:        {},
+  id_sesion:       null,
 
-  startSession: async () => {
+  startSession: async (noEmpleado: number, codigoMateria: string) => {
     if (_signalInterval !== null) return;
     set({ isLoading: true, error: null });
 
     try {
-      const data = await obtenerAlumnos();
-      if (!data.success) throw new Error('Respuesta invalida del servidor');
+      // 1. Crear sesión en BD → obtener id_sesion
+      const sesionData = await iniciarSesion(noEmpleado, codigoMateria);
+      if (!sesionData.success) throw new Error('No se pudo crear la sesión en la BD');
 
+      // 2. Cargar alumnos reales
+      const data = await obtenerAlumnos();
+      if (!data.success) throw new Error('Respuesta inválida del servidor');
+
+      // 3. Normalizar array → Record<id, Student>
       const students: Record<string, Student> = {};
       const studentIds: string[] = [];
 
@@ -55,8 +66,16 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         studentIds.push(id);
       }
 
-      set({ isSessionActive: true, isLoading: false, students, studentIds });
+      set({
+        isSessionActive: true,
+        isLoading:       false,
+        students,
+        studentIds,
+        id_sesion:       sesionData.id_sesion,
+      });
 
+      // 4. Simulación de señales BLE
+      // En producción: sustituir este setInterval por el listener de bleService.js
       _signalInterval = setInterval(() => {
         const { studentIds: ids } = get();
         if (ids.length === 0) return;
@@ -70,6 +89,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         }));
       }, SIGNAL_TICK_MS);
 
+      // 5. Decay sweep — solo escribe en store si algo cambió
       _decayInterval = setInterval(() => {
         const { students } = get();
         let dirty = false;
@@ -90,11 +110,23 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     }
   },
 
-  endSession: () => {
+  endSession: async () => {
     clearIntervals();
+    const { id_sesion } = get();
+
+    // Cerrar sesión en BD (fire-and-forget si falla, igual se limpia la UI)
+    if (id_sesion !== null) {
+      try {
+        await cerrarSesion(id_sesion);
+      } catch (err: any) {
+        console.warn('[endSession] Error cerrando sesión en BD:', err.message);
+      }
+    }
+
     set(state => ({
       isSessionActive: false,
-      error: null,
+      error:           null,
+      id_sesion:       null,
       students: Object.fromEntries(
         Object.entries(state.students).map(([id, s]) => [
           id, { ...s, lastSignalAt: null, status: 'offline' as SignalStatus },
