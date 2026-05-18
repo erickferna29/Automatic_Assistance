@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,19 +8,29 @@ import {
   SafeAreaView,
   StatusBar,
   Platform,
+  ActivityIndicator,
+  Alert,
   type ListRenderItemInfo,
 } from 'react-native';
 import { useSessionStore } from '../store/sessionStore';
 import StudentRow from '../components/StudentRow';
+import type { Profesor, Materia } from '../types';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FlatList Render Helpers — Defined OUTSIDE the component
-//
-// WHY OUTSIDE? If defined inside DashboardScreen, these functions are
-// re-allocated on every render of the screen. FlatList receives a new
-// `renderItem` reference → internal shouldComponentUpdate fails →
-// ALL item rows re-render. This is one of the most common FlatList
-// performance pitfalls in production React Native apps.
+// Navigation Props
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface DashboardScreenProps {
+  navigation: any;
+  route: {
+    params: {
+      profesor: Profesor;
+    };
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FlatList helpers — definidos fuera del componente para evitar re-renders
 // ─────────────────────────────────────────────────────────────────────────────
 
 const renderStudentRow = ({ item }: ListRenderItemInfo<string>) => (
@@ -30,32 +40,92 @@ const renderStudentRow = ({ item }: ListRenderItemInfo<string>) => (
 const keyExtractor = (id: string) => id;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Stats Selector
-//
-// ⚠️ KNOWN TRADEOFF: This derived value (onlineCount) forces a DashboardScreen
-// re-render whenever ANY student changes status. For a 10-student mock, this is
-// acceptable. At scale (100+ students), move this to a dedicated <StatsBar />
-// component with its own selector, or maintain `onlineCount` as a derived value
-// in the store (updated incrementally in startSession's set calls).
-// ─────────────────────────────────────────────────────────────────────────────
-
-const selectOnlineCount = (state: {
-  studentIds: string[];
-  students: Record<string, { status: string }>;
-}) =>
-  state.studentIds.filter(id => state.students[id]?.status === 'online').length;
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Screen
 // ─────────────────────────────────────────────────────────────────────────────
 
-const DashboardScreen: React.FC = () => {
+const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation, route }) => {
+  const profesor = route?.params?.profesor;
+
+  // Si no hay profesor en los params (acceso directo en dev), mostrar error
+  if (!profesor) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyTitle}>Sin datos de profesor</Text>
+          <TouchableOpacity onPress={() => navigation.navigate('Login')}>
+            <Text style={{ color: '#00E676', marginTop: 12 }}>Volver al Login</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // ── Zustand selectors ──
   const isSessionActive = useSessionStore(state => state.isSessionActive);
+  const isLoading       = useSessionStore(state => state.isLoading);
+  const error           = useSessionStore(state => state.error);
   const studentIds      = useSessionStore(state => state.studentIds);
   const startSession    = useSessionStore(state => state.startSession);
   const endSession      = useSessionStore(state => state.endSession);
-  const onlineCount     = useSessionStore(selectOnlineCount);
-  const totalCount      = studentIds.length;
+
+  const onlineCount = useSessionStore(
+    useCallback(
+      state => state.studentIds.filter(id => state.students[id]?.status === 'online').length,
+      []
+    )
+  );
+
+  // ── Materia seleccionada ──
+  const [selectedMateria, setSelectedMateria] = useState<Materia | null>(
+    profesor.materias?.length === 1 ? profesor.materias[0] : null
+  );
+
+  // ── Handlers ──
+  const handleStartSession = () => {
+    if (profesor.materias?.length === 0) {
+      Alert.alert('Sin materias', 'Este profesor no tiene materias asignadas en el sistema.');
+      return;
+    }
+
+    // Si tiene varias materias y no se ha seleccionado, mostrar picker
+    if (!selectedMateria && profesor.materias?.length > 1) {
+      Alert.alert(
+        'Selecciona una materia',
+        'Elige la materia para esta sesión:',
+        profesor.materias.map((m: Materia) => ({
+          text: m.nombre_materia,
+          onPress: () => {
+            setSelectedMateria(m);
+            startSession(profesor.no_empleado, m.codigo_materia);
+          },
+        }))
+      );
+      return;
+    }
+
+    const materia = selectedMateria ?? profesor.materias?.[0];
+    if (materia) startSession(profesor.no_empleado, materia.codigo_materia);
+  };
+
+  const handleEndSession = async () => {
+    Alert.alert(
+      'Cerrar Sesión',
+      '¿Confirmas que deseas finalizar la sesión de clase?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Finalizar',
+          style: 'destructive',
+          onPress: async () => {
+            await endSession();
+            navigation.navigate('Login');
+          },
+        },
+      ]
+    );
+  };
+
+  const totalCount = studentIds.length;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -63,56 +133,62 @@ const DashboardScreen: React.FC = () => {
 
       {/* ── Header ── */}
       <View style={styles.header}>
-        <View>
+        <View style={{ flex: 1 }}>
           <Text style={styles.headerEyebrow}>MONITOR DE PRESENCIA</Text>
-          <Text style={styles.headerTitle}>Dashboard Docente</Text>
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            {profesor.nombre_profesor}
+          </Text>
+          {selectedMateria && (
+            <Text style={styles.headerMateria}>{selectedMateria.nombre_materia}</Text>
+          )}
         </View>
-        <View style={[
-          styles.sessionPill,
-          isSessionActive && styles.sessionPillActive,
-        ]}>
-          <View style={[
-            styles.sessionDot,
-            isSessionActive && styles.sessionDotActive,
-          ]} />
-          <Text style={[
-            styles.sessionPillText,
-            isSessionActive && styles.sessionPillTextActive,
-          ]}>
-            {isSessionActive ? 'SESIÓN ACTIVA' : 'SIN SESIÓN'}
+        <View style={[styles.sessionPill, isSessionActive && styles.sessionPillActive]}>
+          <View style={[styles.sessionDot, isSessionActive && styles.sessionDotActive]} />
+          <Text style={[styles.sessionPillText, isSessionActive && styles.sessionPillTextActive]}>
+            {isSessionActive ? 'ACTIVA' : 'INACTIVA'}
           </Text>
         </View>
       </View>
 
-      {/* ── Stats Bar — only visible when session is active ── */}
+      {/* ── Stats Bar ── */}
       {isSessionActive && (
         <View style={styles.statsBar}>
-          <StatCell
-            value={totalCount}
-            label="ALUMNOS"
-            valueStyle={styles.statValueDefault}
-          />
+          <View style={styles.statCell}>
+            <Text style={[styles.statValue, styles.statValueDefault]}>{totalCount}</Text>
+            <Text style={styles.statLabel}>ALUMNOS</Text>
+          </View>
           <View style={styles.statDivider} />
-          <StatCell
-            value={onlineCount}
-            label="EN LÍNEA"
-            valueStyle={styles.statValueOnline}
-          />
+          <View style={styles.statCell}>
+            <Text style={[styles.statValue, styles.statValueOnline]}>{onlineCount}</Text>
+            <Text style={styles.statLabel}>EN LÍNEA</Text>
+          </View>
           <View style={styles.statDivider} />
-          <StatCell
-            value={totalCount - onlineCount}
-            label="INACTIVOS"
-            valueStyle={styles.statValueIdle}
-          />
+          <View style={styles.statCell}>
+            <Text style={[styles.statValue, styles.statValueIdle]}>{totalCount - onlineCount}</Text>
+            <Text style={styles.statLabel}>INACTIVOS</Text>
+          </View>
+        </View>
+      )}
+
+      {/* ── Feedback: loading / error ── */}
+      {isLoading && (
+        <View style={styles.feedbackBox}>
+          <ActivityIndicator color="#00E676" size="small" />
+          <Text style={styles.feedbackText}>  Cargando alumnos desde el servidor...</Text>
+        </View>
+      )}
+      {!!error && (
+        <View style={[styles.feedbackBox, styles.feedbackError]}>
+          <Text style={styles.feedbackText}>⚠  {error}</Text>
         </View>
       )}
 
       {/* ── Session Controls ── */}
       <View style={styles.controlsRow}>
         <TouchableOpacity
-          style={[styles.btn, styles.btnStart, isSessionActive  && styles.btnDisabled]}
-          onPress={startSession}
-          disabled={isSessionActive}
+          style={[styles.btn, styles.btnStart, isSessionActive && styles.btnDisabled]}
+          onPress={handleStartSession}
+          disabled={isSessionActive || isLoading}
           activeOpacity={0.75}
         >
           <Text style={styles.btnText}>▶  LEVANTAR SESIÓN</Text>
@@ -120,7 +196,7 @@ const DashboardScreen: React.FC = () => {
 
         <TouchableOpacity
           style={[styles.btn, styles.btnEnd, !isSessionActive && styles.btnDisabled]}
-          onPress={endSession}
+          onPress={handleEndSession}
           disabled={!isSessionActive}
           activeOpacity={0.75}
         >
@@ -136,12 +212,11 @@ const DashboardScreen: React.FC = () => {
             <Text style={styles.listHeaderCount}>{totalCount}</Text>
           </View>
           <FlatList
-            data={studentIds}        // ← ONLY IDs. FlatList never re-renders on signal updates.
+            data={studentIds}
             renderItem={renderStudentRow}
             keyExtractor={keyExtractor}
             style={styles.list}
             showsVerticalScrollIndicator={false}
-            // Tuned for typical classroom size (10–50 students)
             windowSize={5}
             maxToRenderPerBatch={10}
             initialNumToRender={10}
@@ -153,30 +228,13 @@ const DashboardScreen: React.FC = () => {
           <Text style={styles.emptyGlyph}>⬡</Text>
           <Text style={styles.emptyTitle}>Sin sesión activa</Text>
           <Text style={styles.emptyBody}>
-            Levanta una sesión para comenzar{'\n'}el monitoreo de presencia en tiempo real.
+            Levanta una sesión para comenzar{'\n'}el monitoreo de presencia.
           </Text>
         </View>
       )}
     </SafeAreaView>
   );
 };
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Sub-components
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface StatCellProps {
-  value: number;
-  label: string;
-  valueStyle: object;
-}
-
-const StatCell: React.FC<StatCellProps> = ({ value, label, valueStyle }) => (
-  <View style={styles.statCell}>
-    <Text style={[styles.statValue, valueStyle]}>{value}</Text>
-    <Text style={styles.statLabel}>{label}</Text>
-  </View>
-);
 
 export default DashboardScreen;
 
@@ -187,16 +245,11 @@ export default DashboardScreen;
 const MONO_FONT = Platform.OS === 'ios' ? 'Menlo' : 'monospace';
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#070E17',
-  },
+  safeArea: { flex: 1, backgroundColor: '#070E17' },
 
-  // ── Header ──
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
+    alignItems: 'flex-start',
     paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 18,
@@ -204,172 +257,67 @@ const styles = StyleSheet.create({
     borderBottomColor: '#0D1926',
   },
   headerEyebrow: {
-    color: '#1E3A52',
-    fontSize: 10,
-    fontFamily: MONO_FONT,
-    letterSpacing: 2.5,
-    marginBottom: 5,
+    color: '#1E3A52', fontSize: 10,
+    fontFamily: MONO_FONT, letterSpacing: 2.5, marginBottom: 4,
   },
   headerTitle: {
-    color: '#C8D8E8',
-    fontSize: 22,
-    fontWeight: '700',
-    letterSpacing: -0.5,
+    color: '#C8D8E8', fontSize: 18, fontWeight: '700', letterSpacing: -0.3,
+  },
+  headerMateria: {
+    color: '#4A6A8A', fontSize: 12, fontFamily: MONO_FONT, marginTop: 3,
   },
   sessionPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderWidth: 1,
-    borderColor: '#1A2E3F',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    backgroundColor: '#0A1520',
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    borderWidth: 1, borderColor: '#1A2E3F', borderRadius: 20,
+    paddingHorizontal: 12, paddingVertical: 7, backgroundColor: '#0A1520',
+    marginTop: 4,
   },
-  sessionPillActive: {
-    borderColor: '#00E67650',
-    backgroundColor: '#00E67612',
-  },
-  sessionDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#1E3A52',
-  },
-  sessionDotActive: {
-    backgroundColor: '#00E676',
-  },
-  sessionPillText: {
-    color: '#1E3A52',
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 1.5,
-    fontFamily: MONO_FONT,
-  },
-  sessionPillTextActive: {
-    color: '#00E676',
-  },
+  sessionPillActive:     { borderColor: '#00E67650', backgroundColor: '#00E67612' },
+  sessionDot:            { width: 6, height: 6, borderRadius: 3, backgroundColor: '#1E3A52' },
+  sessionDotActive:      { backgroundColor: '#00E676' },
+  sessionPillText:       { color: '#1E3A52', fontSize: 9, fontWeight: '700', letterSpacing: 1.5, fontFamily: MONO_FONT },
+  sessionPillTextActive: { color: '#00E676' },
 
-  // ── Stats Bar ──
   statsBar: {
-    flexDirection: 'row',
-    marginHorizontal: 20,
-    marginTop: 16,
-    borderWidth: 1,
-    borderColor: '#0D1926',
-    borderRadius: 10,
-    backgroundColor: '#0A1520',
-    overflow: 'hidden',
+    flexDirection: 'row', marginHorizontal: 20, marginTop: 16,
+    borderWidth: 1, borderColor: '#0D1926', borderRadius: 10,
+    backgroundColor: '#0A1520', overflow: 'hidden',
   },
-  statCell: {
-    flex: 1,
-    paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  statDivider: {
-    width: 1,
-    backgroundColor: '#0D1926',
-  },
-  statValue: {
-    fontSize: 26,
-    fontWeight: '700',
-    letterSpacing: -1,
-  },
+  statCell:         { flex: 1, paddingVertical: 14, alignItems: 'center', justifyContent: 'center' },
+  statDivider:      { width: 1, backgroundColor: '#0D1926' },
+  statValue:        { fontSize: 26, fontWeight: '700', letterSpacing: -1 },
   statValueDefault: { color: '#C8D8E8' },
   statValueOnline:  { color: '#00E676' },
   statValueIdle:    { color: '#FFAB40' },
-  statLabel: {
-    color: '#1E3A52',
-    fontSize: 9,
-    letterSpacing: 2,
-    fontFamily: MONO_FONT,
-    marginTop: 3,
-  },
+  statLabel:        { color: '#1E3A52', fontSize: 9, letterSpacing: 2, fontFamily: MONO_FONT, marginTop: 3 },
 
-  // ── Controls ──
-  controlsRow: {
-    flexDirection: 'row',
-    gap: 12,
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+  feedbackBox: {
+    flexDirection: 'row', alignItems: 'center',
+    marginHorizontal: 20, marginTop: 10, padding: 12,
+    borderRadius: 8, backgroundColor: '#0A1520',
+    borderWidth: 1, borderColor: '#0D1926',
   },
-  btn: {
-    flex: 1,
-    paddingVertical: 15,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-  },
-  btnStart: {
-    backgroundColor: '#00261300',
-    borderColor: '#00E67680',
-  },
-  btnEnd: {
-    backgroundColor: '#26000000',
-    borderColor: '#FF3D0080',
-  },
-  btnDisabled: {
-    opacity: 0.25,
-  },
-  btnText: {
-    color: '#C8D8E8',
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 1.2,
-    fontFamily: MONO_FONT,
-  },
+  feedbackError: { borderColor: '#FF3D0050', backgroundColor: '#1A0A0A' },
+  feedbackText:  { color: '#4A6A8A', fontSize: 12, fontFamily: MONO_FONT },
 
-  // ── List ──
+  controlsRow: { flexDirection: 'row', gap: 12, paddingHorizontal: 20, paddingVertical: 16 },
+  btn:         { flex: 1, paddingVertical: 15, borderRadius: 10, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
+  btnStart:    { backgroundColor: '#00261300', borderColor: '#00E67680' },
+  btnEnd:      { backgroundColor: '#26000000', borderColor: '#FF3D0080' },
+  btnDisabled: { opacity: 0.25 },
+  btnText:     { color: '#C8D8E8', fontSize: 12, fontWeight: '700', letterSpacing: 1.2, fontFamily: MONO_FONT },
+
   listHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#0D1926',
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 20, paddingBottom: 10,
+    borderBottomWidth: 1, borderBottomColor: '#0D1926',
   },
-  listHeaderText: {
-    color: '#1E3A52',
-    fontSize: 10,
-    fontFamily: MONO_FONT,
-    letterSpacing: 2,
-  },
-  listHeaderCount: {
-    color: '#2A5070',
-    fontSize: 10,
-    fontFamily: MONO_FONT,
-  },
-  list: {
-    flex: 1,
-  },
+  listHeaderText:  { color: '#1E3A52', fontSize: 10, fontFamily: MONO_FONT, letterSpacing: 2 },
+  listHeaderCount: { color: '#2A5070', fontSize: 10, fontFamily: MONO_FONT },
+  list:            { flex: 1 },
 
-  // ── Empty State ──
-  emptyState: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingBottom: 100,
-    gap: 10,
-  },
-  emptyGlyph: {
-    fontSize: 52,
-    color: '#0D1926',
-    marginBottom: 8,
-  },
-  emptyTitle: {
-    color: '#1E3A52',
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  emptyBody: {
-    color: '#162840',
-    fontSize: 13,
-    textAlign: 'center',
-    lineHeight: 22,
-    fontFamily: MONO_FONT,
-  },
+  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingBottom: 100, gap: 10 },
+  emptyGlyph: { fontSize: 52, color: '#0D1926', marginBottom: 8 },
+  emptyTitle: { color: '#1E3A52', fontSize: 18, fontWeight: '600' },
+  emptyBody:  { color: '#162840', fontSize: 13, textAlign: 'center', lineHeight: 22, fontFamily: MONO_FONT },
 });
