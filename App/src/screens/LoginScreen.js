@@ -28,11 +28,10 @@ const LoginScreen = ({ navigation }) => {
 
     // Profesores no tienen NIP en la BD — si el número es corto (≤5 dígitos),
     // el NIP es opcional. El backend detecta el tipo automáticamente.
-    const esProfesor = noCuenta.trim().length <= 5;
-    if (!esProfesor && !nip.trim()) {
-      Alert.alert('Campo requerido', 'Ingresa tu NIP de acceso.');
-      return;
-    }
+    if (!nip.trim()) {
+  Alert.alert('Campo requerido', 'Ingresa tu NIP de acceso.');
+  return;
+}
 
     setLoading(true);
     try {

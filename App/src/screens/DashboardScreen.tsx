@@ -46,7 +46,6 @@ const keyExtractor = (id: string) => id;
 const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation, route }) => {
   const profesor = route?.params?.profesor;
 
-  // Si no hay profesor en los params (acceso directo en dev), mostrar error
   if (!profesor) {
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -87,7 +86,6 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation, route }) 
       return;
     }
 
-    // Si tiene varias materias y no se ha seleccionado, mostrar picker
     if (!selectedMateria && profesor.materias?.length > 1) {
       Alert.alert(
         'Selecciona una materia',
@@ -107,9 +105,10 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation, route }) 
     if (materia) startSession(profesor.no_empleado, materia.codigo_materia);
   };
 
+  // Cierra SOLO la sesión de clase — el profesor se queda en el Dashboard
   const handleEndSession = async () => {
     Alert.alert(
-      'Cerrar Sesión',
+      'Cerrar sesión de clase',
       '¿Confirmas que deseas finalizar la sesión de clase?',
       [
         { text: 'Cancelar', style: 'cancel' },
@@ -118,11 +117,20 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation, route }) 
           style: 'destructive',
           onPress: async () => {
             await endSession();
-            navigation.navigate('Login');
+            // No navega — el profesor sigue en el Dashboard
           },
         },
       ]
     );
+  };
+
+  // Cierra sesión del usuario y regresa al Login
+  const handleLogout = async () => {
+    if (isSessionActive) {
+      // Si hay sesión de clase activa, la cerramos antes de salir
+      await endSession();
+    }
+    navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
   };
 
   const totalCount = studentIds.length;
@@ -142,11 +150,18 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation, route }) 
             <Text style={styles.headerMateria}>{selectedMateria.nombre_materia}</Text>
           )}
         </View>
-        <View style={[styles.sessionPill, isSessionActive && styles.sessionPillActive]}>
-          <View style={[styles.sessionDot, isSessionActive && styles.sessionDotActive]} />
-          <Text style={[styles.sessionPillText, isSessionActive && styles.sessionPillTextActive]}>
-            {isSessionActive ? 'ACTIVA' : 'INACTIVA'}
-          </Text>
+        <View style={styles.headerRight}>
+          {/* Botón salir — cierra sesión de usuario */}
+          <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn}>
+            <Text style={styles.logoutBtnText}>SALIR →</Text>
+          </TouchableOpacity>
+          {/* Pill de estado de sesión de clase */}
+          <View style={[styles.sessionPill, isSessionActive && styles.sessionPillActive]}>
+            <View style={[styles.sessionDot, isSessionActive && styles.sessionDotActive]} />
+            <Text style={[styles.sessionPillText, isSessionActive && styles.sessionPillTextActive]}>
+              {isSessionActive ? 'ACTIVA' : 'INACTIVA'}
+            </Text>
+          </View>
         </View>
       </View>
 
@@ -266,11 +281,30 @@ const styles = StyleSheet.create({
   headerMateria: {
     color: '#4A6A8A', fontSize: 12, fontFamily: MONO_FONT, marginTop: 3,
   },
+  headerRight: {
+    alignItems: 'flex-end',
+    gap: 8,
+    marginTop: 4,
+  },
+  logoutBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FF3D0060',
+    backgroundColor: '#1A000005',
+  },
+  logoutBtnText: {
+    color: '#FF3D00',
+    fontSize: 9,
+    fontWeight: '700',
+    fontFamily: MONO_FONT,
+    letterSpacing: 1,
+  },
   sessionPill: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     borderWidth: 1, borderColor: '#1A2E3F', borderRadius: 20,
     paddingHorizontal: 12, paddingVertical: 7, backgroundColor: '#0A1520',
-    marginTop: 4,
   },
   sessionPillActive:     { borderColor: '#00E67650', backgroundColor: '#00E67612' },
   sessionDot:            { width: 6, height: 6, borderRadius: 3, backgroundColor: '#1E3A52' },
