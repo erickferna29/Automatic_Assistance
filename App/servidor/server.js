@@ -37,10 +37,10 @@ app.use(express.json());
 // ============================================================
 const DB_CONFIG = {
   host:     'localhost',   // IP del servidor donde corre MariaDB
-  port:     3306,          // Puerto de MariaDB (XAMPP usa 3306 por defecto)
-  database: 'db_asistencia', // Nombre de tu base de datos
+  port:     3308,          // Puerto de MariaDB (XAMPP usa 3306 por defecto)
+  database: 'Automatic_Asistance', // Nombre de tu base de datos
   user:     'root',        // Usuario de MariaDB
-  password: '1234',        // Contrase├▒a de MariaDB
+  password: 'asisT3ncia',        // Contrase├▒a de MariaDB
   waitForConnections: true,
   connectionLimit:    10,
 };
@@ -350,4 +350,6 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`­ƒô▒ Para el emulador Android usa: http://10.0.2.2:${PORT}`);
   console.log(`­ƒô▒ Para dispositivo f├¡sico usa:  http://TU_IP_LOCAL:${PORT}\n`);
 });
+
+
 
