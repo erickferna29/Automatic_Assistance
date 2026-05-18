@@ -1,11 +1,12 @@
 import React from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
-
-import LoginScreen from '../screens/LoginScreen';
-import PermissionsScreen from '../screens/PermissionsScreen';
+import LoginScreen             from '../screens/LoginScreen';
+import RegisterScreen          from '../screens/RegisterScreen';
+import PermissionsScreen       from '../screens/PermissionsScreen';
 import PermissionsDeniedScreen from '../screens/PermissionsDeniedScreen';
-import PhotoCaptureScreen from '../screens/PhotoCaptureScreen';
-import WelcomeScreen from '../screens/WelcomeScreen';
+import PhotoCaptureScreen      from '../screens/PhotoCaptureScreen';
+import WelcomeScreen           from '../screens/WelcomeScreen';
+import DashboardScreen         from '../screens/DashboardScreen';
 
 const Stack = createStackNavigator();
 
@@ -13,15 +14,15 @@ const AppNavigator = () => {
   return (
     <Stack.Navigator
       initialRouteName="Login"
-      screenOptions={{
-        headerShown: false,
-        cardStyle: { backgroundColor: '#000000' },
-      }}>
-      <Stack.Screen name="Login" component={LoginScreen} />
-      <Stack.Screen name="Permissions" component={PermissionsScreen} />
+      screenOptions={{ headerShown: false, cardStyle: { backgroundColor: '#000000' } }}
+    >
+      <Stack.Screen name="Login"             component={LoginScreen} />
+      <Stack.Screen name="Register"          component={RegisterScreen} />
+      <Stack.Screen name="Permissions"       component={PermissionsScreen} />
       <Stack.Screen name="PermissionsDenied" component={PermissionsDeniedScreen} />
-      <Stack.Screen name="PhotoCapture" component={PhotoCaptureScreen} />
-      <Stack.Screen name="Welcome" component={WelcomeScreen} />
+      <Stack.Screen name="PhotoCapture"      component={PhotoCaptureScreen} />
+      <Stack.Screen name="Welcome"           component={WelcomeScreen} />
+      <Stack.Screen name="Dashboard"         component={DashboardScreen} />
     </Stack.Navigator>
   );
 };
