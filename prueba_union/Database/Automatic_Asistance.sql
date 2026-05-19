@@ -358,7 +358,8 @@ CREATE TABLE `Profesores` (
   `no_empleado` int(11) NOT NULL,
   `nombre_profesor` varchar(150) DEFAULT NULL,
   `num_celular` varchar(20) DEFAULT NULL,
-  `correo` varchar(100) DEFAULT NULL
+  `correo` varchar(100) DEFAULT NULL,
+  `nip` varchar(10) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --

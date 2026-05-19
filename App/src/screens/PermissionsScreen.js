@@ -7,7 +7,7 @@ import {
   Alert,
   Platform,
 } from 'react-native';
-import { request, PERMISSIONS, RESULTS } from 'react-native-permissions';
+import { request, requestMultiple, PERMISSIONS, RESULTS } from 'react-native-permissions';
 
 const PermissionsScreen = ({ navigation, route }) => {
   const { usuario } = route.params;
@@ -17,20 +17,22 @@ const PermissionsScreen = ({ navigation, route }) => {
 
   const requestBluetooth = async () => {
     try {
-      const permission =
-        Platform.OS === 'android'
-          ? parseInt(Platform.Version, 10) >= 31
-            ? PERMISSIONS.ANDROID.BLUETOOTH_CONNECT
-            : PERMISSIONS.ANDROID.ACCESS_FINE_LOCATION
-          : PERMISSIONS.IOS.BLUETOOTH_PERIPHERAL;
+      let permissions = [PERMISSIONS.ANDROID.ACCESS_FINE_LOCATION];
 
-      const result = await request(permission);
-      if (result === RESULTS.GRANTED) {
-        setBluetoothGranted(true);
-        return true;
+      // Si es Android 12 (API 31) o superior, pide permisos modernos
+      if (Platform.OS === 'android' && parseInt(Platform.Version, 10) >= 31) {
+        permissions = [
+          PERMISSIONS.ANDROID.BLUETOOTH_ADVERTISE,
+          PERMISSIONS.ANDROID.BLUETOOTH_CONNECT,
+          PERMISSIONS.ANDROID.BLUETOOTH_SCAN,
+          PERMISSIONS.ANDROID.ACCESS_FINE_LOCATION
+        ];
       }
-      return false;
-    } catch {
+
+      const results = await requestMultiple(permissions);
+      // Verifica que todos hayan sido concedidos
+      return Object.values(results).every(res => res === RESULTS.GRANTED);
+    } catch (e) {
       return false;
     }
   };
@@ -62,8 +64,14 @@ const PermissionsScreen = ({ navigation, route }) => {
     setLoading(false);
 
     if (btOk && camOk) {
-      // Ambos permisos concedidos → continuar
-      navigation.navigate('PhotoCapture', { usuario });
+      // Ambos permisos concedidos → verificamos si ya tiene foto
+      if (!usuario.foto_url) {
+        // No tiene foto (es null), lo mandamos a tomarla
+        navigation.navigate('PhotoCapture', { usuario });
+      } else {
+        // Ya tiene foto, nos saltamos la cámara y vamos al Dashboard
+        navigation.navigate('Dashboard', { usuario });
+      }
     } else {
       // Al menos uno denegado → pantalla de permisos requeridos
       navigation.navigate('PermissionsDenied');

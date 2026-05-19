@@ -18,10 +18,13 @@ app.mount("/fotos", StaticFiles(directory="fotos_alumnos"), name="fotos")
 #  MODELOS
 # ─────────────────────────────────────────────
 
-class LoginData(BaseModel):
+class LoginUniversal(BaseModel):
     no_cuenta: str
     nip: str
 
+class RegistroAlumno(BaseModel):
+    no_cuenta: str
+    nip: str
 
 class RegistroAsistencia(BaseModel):
     id_alumno: str  # String para filtrar basura bluetooth
@@ -61,30 +64,52 @@ def inicio():
 # ─────────────────────────────────────────────
 #  APP MÓVIL / FOTOS
 # ─────────────────────────────────────────────
+# ─────────────────────────────────────────────
+#  REGISTRO DE ALUMNOS
+# ─────────────────────────────────────────────
 
-@app.post("/auth/login")
-def login_usuario(data: LoginData):
+@app.post("/auth/registro")
+def registrar_alumno(data: RegistroAlumno):
     """
-    Autentica al alumno con no_cuenta + nip.
-    Devuelve sus datos y la lista de materias en las que está inscrito.
+    Primer acceso del alumno: valida que exista en BD y le asigna un NIP.
+    Si ya tiene NIP, devuelve error para que use el login normal.
     """
     try:
         conexion = conectarbd()
         cursor = conexion.cursor(dictionary=True)
 
-        # 1. Verificar credenciales
+        # 1. Verificar que el alumno exista
         cursor.execute(
-            "SELECT * FROM Alumnos WHERE no_cuenta = %s AND nip = %s",
-            (data.no_cuenta, data.nip)
+            "SELECT no_cuenta, nombres, apellido_paterno, apellido_materno, grupo, grado, carrera, foto, nip FROM Alumnos WHERE no_cuenta = %s",
+            (data.no_cuenta,)
         )
-        usuario = cursor.fetchone()
+        alumno = cursor.fetchone()
 
-        if not usuario:
+        if not alumno:
             cursor.close()
             conexion.close()
-            return {"success": False, "message": "Número de cuenta o NIP incorrectos"}
+            return {
+                "success": False,
+                "message": "Número de cuenta no encontrado. Verifica tu número o contacta al administrador."
+            }
 
-        # 2. Obtener materias inscritas (Alumno_Materia → Materias)
+        # 2. Si ya tiene NIP registrado, no permitir re-registro
+        if alumno.get("nip"):
+            cursor.close()
+            conexion.close()
+            return {
+                "success": False,
+                "message": "Este número ya tiene NIP registrado. Usa la opción de Iniciar Sesión."
+            }
+
+        # 3. Asignar el NIP
+        cursor.execute(
+            "UPDATE Alumnos SET nip = %s WHERE no_cuenta = %s",
+            (data.nip, data.no_cuenta)
+        )
+        conexion.commit()
+
+        # 4. Obtener materias inscritas
         cursor.execute(
             """
             SELECT m.codigo_materia, m.nombre_materia
@@ -92,7 +117,7 @@ def login_usuario(data: LoginData):
                      JOIN Materias m ON am.id_materia = m.codigo_materia
             WHERE am.id_alumno = %s
             """,
-            (usuario["no_cuenta"],)
+            (data.no_cuenta,)
         )
         materias = cursor.fetchall()
 
@@ -100,29 +125,148 @@ def login_usuario(data: LoginData):
         conexion.close()
 
         nombre_completo = (
-            f"{usuario.get('nombres', '')} "
-            f"{usuario.get('apellido_paterno', '')} "
-            f"{usuario.get('apellido_materno', '')}".strip()
+            f"{alumno.get('nombres', '')} "
+            f"{alumno.get('apellido_paterno', '')} "
+            f"{alumno.get('apellido_materno', '')}".strip()
         )
+
+        print(f"[REGISTRO] Alumno {data.no_cuenta} ({nombre_completo}) registró NIP exitosamente.")
 
         return {
             "success": True,
+            "message": "NIP registrado exitosamente. Ahora toma tu foto de identificación.",
             "usuario": {
-                "id": str(usuario["no_cuenta"]),
-                "no_cuenta": str(usuario["no_cuenta"]),
+                "id": str(alumno["no_cuenta"]),
+                "no_cuenta": str(alumno["no_cuenta"]),
                 "nombre": nombre_completo,
-                "foto_url": f"/fotos/{usuario.get('foto')}" if usuario.get('foto') else None,
-                "grupo": usuario.get("grupo"),
-                "grado": usuario.get("grado"),
+                "foto_url": f"/fotos/{alumno['foto']}" if alumno.get("foto") else None,
+                "grupo": alumno.get("grupo"),
+                "grado": alumno.get("grado"),
+                "carrera": alumno.get("carrera"),
                 "materias": materias
             }
         }
 
     except Exception as error:
-        print(f"[login] Error: {error}")
+        print(f"[registro] Error: {error}")
         return {"success": False, "message": "Error interno del servidor"}
 
 
+# ─────────────────────────────────────────────
+#  LOGIN UNIVERSAL (profesores + alumnos)
+# ─────────────────────────────────────────────
+
+@app.post("/auth/login-universal")
+def login_universal(data: LoginUniversal):
+    """
+    Login unificado: detecta si el número es de Profesor o Alumno.
+    AHORA EXIGE NIP PARA AMBOS OBLIGATORIAMENTE.
+    """
+    # 1. Validación estricta: Rechazar inmediatamente si viene vacío
+    if not data.no_cuenta.strip() or not data.nip.strip():
+        return {"success": False, "message": "El número de cuenta/empleado y el NIP son obligatorios."}
+
+    try:
+        conexion = conectarbd()
+        cursor = conexion.cursor(dictionary=True)
+
+        # ==========================================
+        #  2. INTENTAR COMO PROFESOR (Con NIP)
+        # ==========================================
+        cursor.execute(
+            "SELECT no_empleado, nombre_profesor, correo FROM Profesores WHERE no_empleado = %s AND nip = %s",
+            (data.no_cuenta, data.nip)
+        )
+        profesor = cursor.fetchone()
+
+        if profesor:
+            # Obtener materias del profesor
+            cursor.execute(
+                """
+                SELECT m.codigo_materia, m.nombre_materia
+                FROM Profesor_Materia pm
+                         JOIN Materias m ON pm.id_materia = m.codigo_materia
+                WHERE pm.id_profesor = %s
+                """,
+                (data.no_cuenta,)
+            )
+            materias = cursor.fetchall()
+            cursor.close()
+            conexion.close()
+
+            return {
+                "success": True,
+                "tipo": "profesor",
+                "usuario": {
+                    "no_empleado": profesor["no_empleado"],
+                    "nombre_profesor": profesor["nombre_profesor"],
+                    "correo": profesor.get("correo"),
+                    "materias": materias
+                }
+            }
+
+        # ==========================================
+        #  3. INTENTAR COMO ALUMNO (Con NIP)
+        # ==========================================
+        cursor.execute(
+            "SELECT no_cuenta, nombres, apellido_paterno, apellido_materno, grupo, grado, carrera, foto, nip FROM Alumnos WHERE no_cuenta = %s AND nip = %s",
+            (data.no_cuenta, data.nip)
+        )
+        alumno = cursor.fetchone()
+
+        if not alumno:
+            # Si no entró ni como profe ni como alumno con ese NIP,
+            # verificamos si el alumno existe pero NUNCA ha registrado su NIP.
+            cursor.execute("SELECT nip FROM Alumnos WHERE no_cuenta = %s", (data.no_cuenta,))
+            existe_alumno = cursor.fetchone()
+
+            cursor.close()
+            conexion.close()
+
+            if existe_alumno and not existe_alumno.get("nip"):
+                return {"success": False, "message": "Aún no tienes NIP. Usa la opción 'Registrar NIP' primero."}
+
+            # Mensaje genérico para no dar pistas a atacantes
+            return {"success": False, "message": "Credenciales incorrectas. Verifica tu número y NIP."}
+
+        # Obtener materias del alumno
+        cursor.execute(
+            """
+            SELECT m.codigo_materia, m.nombre_materia
+            FROM Alumno_Materia am
+                     JOIN Materias m ON am.id_materia = m.codigo_materia
+            WHERE am.id_alumno = %s
+            """,
+            (data.no_cuenta,)
+        )
+        materias = cursor.fetchall()
+        cursor.close()
+        conexion.close()
+
+        nombre_completo = (
+            f"{alumno.get('nombres', '')} "
+            f"{alumno.get('apellido_paterno', '')} "
+            f"{alumno.get('apellido_materno', '')}".strip()
+        )
+
+        return {
+            "success": True,
+            "tipo": "alumno",
+            "usuario": {
+                "id": str(alumno["no_cuenta"]),
+                "no_cuenta": str(alumno["no_cuenta"]),
+                "nombre": nombre_completo,
+                "foto_url": f"/fotos/{alumno['foto']}" if alumno.get("foto") else None,
+                "grupo": alumno.get("grupo"),
+                "grado": alumno.get("grado"),
+                "carrera": alumno.get("carrera"),
+                "materias": materias
+            }
+        }
+
+    except Exception as error:
+        print(f"[login_universal] Error: {error}")
+        return {"success": False, "message": "Error interno del servidor"}
 @app.post("/usuario/foto")
 def subir_foto(usuario_id: str = Form(...), foto: UploadFile = File(...)):
     """Sube, almacena físicamente y vincula la foto de perfil de un alumno en la BD."""
@@ -592,3 +736,152 @@ async def asistencia_visual(foto: UploadFile = File(...)):
         print(f"[ERROR CRITICO] {traceback.format_exc()}")
         # ¡Desenmascaramos el error! Ahora lo verás en la cajita negra de Swagger.
         return {"status": "error", "mensaje": f"Fallo interno: {str(e)}"}
+
+# ─────────────────────────────────────────────
+#  NUEVOS ENDPOINTS PARA EL DASHBOARD DE PROFESOR
+# ─────────────────────────────────────────────
+
+@app.get("/alumnos/{codigo_materia}")
+def obtener_alumnos_materia(codigo_materia: str):
+    """
+    Retorna todos los alumnos inscritos en una materia específica.
+    Usado por el Dashboard del profesor al iniciar la sesión.
+    """
+    try:
+        conexion = conectarbd()
+        cursor = conexion.cursor(dictionary=True)
+
+        cursor.execute("""
+            SELECT
+                a.no_cuenta,
+                a.nombres,
+                a.apellido_paterno,
+                a.apellido_materno,
+                a.grupo,
+                a.grado,
+                a.carrera,
+                a.foto
+            FROM Alumno_Materia am
+            JOIN Alumnos a ON am.id_alumno = a.no_cuenta
+            WHERE am.id_materia = %s
+            ORDER BY a.apellido_paterno, a.apellido_materno, a.nombres
+        """, (codigo_materia,))
+        alumnos = cursor.fetchall()
+
+        cursor.close()
+        conexion.close()
+
+        result = []
+        for al in alumnos:
+            nombre = f"{al.get('nombres','')} {al.get('apellido_paterno','')} {al.get('apellido_materno','')}".strip()
+            result.append({
+                "no_cuenta": str(al["no_cuenta"]),
+                "nombre": nombre,
+                "grupo": al.get("grupo"),
+                "grado": al.get("grado"),
+                "carrera": al.get("carrera"),
+                "foto_url": f"/fotos/{al['foto']}" if al.get("foto") else None,
+            })
+
+        return {"success": True, "alumnos": result}
+
+    except Exception as e:
+        print(f"[obtener_alumnos_materia] Error: {e}")
+        return {"success": False, "message": "Error al obtener alumnos", "alumnos": []}
+
+
+@app.get("/alumnos_activos/{id_sesion}")
+def obtener_alumnos_activos(id_sesion: int):
+    """
+    Retorna los alumnos detectados (con al menos 1 log BLE) en la sesión activa,
+    junto con su conteo de logs para que el front pueda mostrar su estado.
+    Usado por el polling del Dashboard cada N segundos.
+    """
+    try:
+        conexion = conectarbd()
+        cursor = conexion.cursor(dictionary=True)
+
+        # Validar que la sesión exista
+        cursor.execute("SELECT id_sesion, codigo_materia FROM Sesiones_Clase WHERE id_sesion = %s", (id_sesion,))
+        sesion = cursor.fetchone()
+        if not sesion:
+            cursor.close()
+            conexion.close()
+            return {"success": False, "message": "Sesión no encontrada", "alumnos_activos": []}
+
+        # Obtener logs agrupados por alumno
+        cursor.execute("""
+            SELECT
+                lb.no_cuenta,
+                COUNT(*) AS total_logs,
+                MAX(lb.timestamp) AS ultima_deteccion,
+                a.nombres,
+                a.apellido_paterno,
+                a.apellido_materno,
+                a.grupo,
+                a.grado,
+                a.carrera
+            FROM Logs_Bluetooth lb
+            JOIN Alumnos a ON lb.no_cuenta = a.no_cuenta
+            WHERE lb.id_sesion = %s
+            GROUP BY lb.no_cuenta, a.nombres, a.apellido_paterno, a.apellido_materno, a.grupo, a.grado, a.carrera
+            ORDER BY ultima_deteccion DESC
+        """, (id_sesion,))
+        activos = cursor.fetchall()
+
+        # Calcular umbral dinámico actual (igual que en _calcular_asistencia_sesion)
+        cursor.execute("""
+            SELECT COUNT(*) AS total FROM Logs_Bluetooth
+            WHERE id_sesion = %s
+            GROUP BY no_cuenta
+            ORDER BY total DESC LIMIT 1
+        """, (id_sesion,))
+        max_row = cursor.fetchone()
+        max_logs = max_row["total"] if max_row else 0
+        margen = 2 if max_logs <= 10 else 3
+        min_para_presente = max(1, max_logs - margen)
+
+        cursor.close()
+        conexion.close()
+
+        ahora = datetime.now()
+        result = []
+        for al in activos:
+            nombre = f"{al.get('nombres','')} {al.get('apellido_paterno','')} {al.get('apellido_materno','')}".strip()
+            # Determinar estado en tiempo real basado en última detección
+            ultima = al["ultima_deteccion"]  # datetime object from MySQL
+            segundos_desde_ultima = (ahora - ultima).total_seconds() if ultima else 9999
+
+            if segundos_desde_ultima <= 30:
+                estado_rt = "online"
+            elif segundos_desde_ultima <= 120:
+                estado_rt = "idle"
+            else:
+                estado_rt = "offline"
+
+            result.append({
+                "no_cuenta": str(al["no_cuenta"]),
+                "nombre": nombre,
+                "grupo": al.get("grupo"),
+                "grado": al.get("grado"),
+                "carrera": al.get("carrera"),
+                "total_logs": al["total_logs"],
+                "ultima_deteccion": ultima.isoformat() if ultima else None,
+                "segundos_inactivo": round(segundos_desde_ultima),
+                "estado_rt": estado_rt,
+                "proyeccion": "PRESENTE" if al["total_logs"] >= min_para_presente else ("DUDOSO" if al["total_logs"] > 0 else "AUSENTE"),
+            })
+
+        return {
+            "success": True,
+            "id_sesion": id_sesion,
+            "total_detectados": len(result),
+            "min_para_presente": min_para_presente,
+            "alumnos_activos": result
+        }
+
+    except Exception as e:
+        print(f"[obtener_alumnos_activos] Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "message": "Error al obtener alumnos activos", "alumnos_activos": []}

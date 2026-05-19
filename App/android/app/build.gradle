@@ -74,6 +74,12 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+        coreLibraryDesugaringEnabled true
+    }
+
     namespace "com.automaticassistence"
     defaultConfig {
         applicationId "com.automaticassistence"
@@ -107,6 +113,7 @@ android {
 
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.0.4'
     implementation("com.facebook.react:react-android")
     implementation("com.facebook.react:flipper-integration")
 

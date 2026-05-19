@@ -19,6 +19,8 @@ services:
     container_name: Asistencia_main
     ports:
       - "8050:8050"
+    volumes:
+      - ./fotos_alumnos:/app/fotos_alumnos
     depends_on:
       - db_asistencia
       - face_recognition

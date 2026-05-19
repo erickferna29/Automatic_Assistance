@@ -32,7 +32,7 @@ const API_CONFIG = {
    *     (usa la IP local de tu PC en la misma red WiFi)
    *   - Producción: 'https://api.tudominio.com'
    */
-  BASE_URL: 'http://10.0.2.2:3000',
+  BASE_URL: 'http://192.168.1.103:8050',
 
   /**
    * Tiempo máximo de espera para las peticiones (en milisegundos)
@@ -118,25 +118,7 @@ const ENDPOINTS = {
  *   - foto_url   → tu campo que almacena la ruta/URL de la foto
  * ──────────────────────────────────────────────────────────
  */
-export const loginUsuario = async (noCuenta, nip) => {
-  try {
-    const response = await apiClient.post(ENDPOINTS.LOGIN, {
-      no_cuenta: noCuenta,  // ← Cambia 'no_cuenta' si tu campo se llama diferente
-      nip: nip,             // ← Cambia 'nip' si tu campo se llama diferente
-    });
-    return response.data;
-  } catch (error) {
-    if (error.response) {
-      // El servidor respondió con error (401, 403, etc.)
-      throw new Error(error.response.data.message || 'Error de autenticación');
-    } else if (error.request) {
-      // No se pudo conectar al servidor
-      throw new Error('No se pudo conectar al servidor. Verifica tu conexión.');
-    } else {
-      throw new Error('Error inesperado: ' + error.message);
-    }
-  }
-};
+
 
 // ============================================================
 //  SERVICIO: OBTENER PERFIL DEL USUARIO
@@ -244,6 +226,24 @@ export const subirFoto = async (userId, fotoUri) => {
   } catch (error) {
     if (error.response) {
       throw new Error(error.response.data.message || 'Error al subir la foto');
+    }
+    throw new Error('No se pudo conectar al servidor.');
+  }
+};
+
+/**
+ * Registra un nuevo NIP para un alumno existente.
+ */
+export const registrarAlumno = async (noCuenta, nip) => {
+  try {
+    const response = await apiClient.post('/auth/registro', {
+      no_cuenta: noCuenta,
+      nip: nip
+    });
+    return response.data;
+  } catch (error) {
+    if (error.response) {
+      throw new Error(error.response.data.message || 'Error al registrar');
     }
     throw new Error('No se pudo conectar al servidor.');
   }
