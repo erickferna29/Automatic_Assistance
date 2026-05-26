@@ -14,9 +14,8 @@
 // ===========================
 // Enter your WiFi credentials
 // ===========================
-// ── Red de Chamba ──────────────────────
-const char *ssid     = "INFINITUM5DE6_2.4";
-const char *password = "Mp7FhGKrRs";
+const char *ssid     = "Telcel_B320_BE2F";
+const char *password = "B7YmHt53M35";
 
 // ── Red de casa ──────────────────────
 //const char *ssid     = "LL2004_2.4";
@@ -27,7 +26,7 @@ const char *password = "Mp7FhGKrRs";
 //const char *password = "Er12121212";
 
 //Cambia a la ip asignada d ela pc actual
-const char *ipActual = "192.168.1.73";
+const char *ipActual = "192.168.8.2";
 
 void startCameraServer();
 void setupLedFlash();

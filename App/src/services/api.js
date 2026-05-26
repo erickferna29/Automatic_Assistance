@@ -32,7 +32,7 @@ const API_CONFIG = {
    *     (usa la IP local de tu PC en la misma red WiFi)
    *   - Producción: 'https://api.tudominio.com'
    */
-  BASE_URL: 'http://192.168.1.103:8050',
+  BASE_URL: 'http://192.168.1.75:8050',
 
   /**
    * Tiempo máximo de espera para las peticiones (en milisegundos)

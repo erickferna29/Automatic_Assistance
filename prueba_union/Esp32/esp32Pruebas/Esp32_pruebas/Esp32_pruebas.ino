@@ -31,9 +31,9 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 //const char* password = "PF3hx2bADE";
 //const char *ipActual = "192.168.1.90";
 
-const char* ssid     = "LL2004_2.4";
-const char* password = "Ab982076522";
-const char *ipActual = "192.168.1.196";
+const char* ssid     = "TELCEL_B320_BE2F";
+const char* password = "B7YmHt53M35";
+const char *ipActual = "192.168.8.1";
 int server_port = 8050;
 
 // ===========================
