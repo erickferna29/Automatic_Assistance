@@ -4,7 +4,7 @@
 #include "sdmmc_cmd.h"
 #include "driver/sdmmc_host.h"
 
-#define BUTTON_PIN 2
+#define BUTTON_PIN 3
 
 // ===========================
 // Select camera model in board_config.h
@@ -14,8 +14,8 @@
 // ===========================
 // Enter your WiFi credentials
 // ===========================
-const char *ssid     = "Telcel_B320_BE2F";
-const char *password = "B7YmHt53M35";
+//const char *ssid     = "Telcel_B320_BE2F";
+//const char *password = "B7YmHt53M35";
 
 // ── Red de casa ──────────────────────
 //const char *ssid     = "LL2004_2.4";
@@ -25,8 +25,13 @@ const char *password = "B7YmHt53M35";
 //const char *ssid     = "Erickferna29";
 //const char *password = "Er12121212";
 
+
+/// ─────────────────
+const char *ssid     = "J7";
+const char *password = "Fernando";
+
 //Cambia a la ip asignada d ela pc actual
-const char *ipActual = "192.168.8.2";
+const char *ipActual = "192.168.43.47";
 
 void startCameraServer();
 void setupLedFlash();
@@ -193,7 +198,7 @@ void do_capture() {
 
   // 3. Enviar al Servidor (FastAPI)
   WiFiClient client;
-  int server_port = 5001;
+  int server_port = 8050;
 
   if (client.connect(ipActual, server_port)) {
     Serial.println("Conectado! Armando paquete Multipart...");
@@ -208,7 +213,7 @@ void do_capture() {
     uint32_t totalLen = head.length() + fb->len + tail.length();
 
     // Enviando encabezados HTTP
-    client.println("POST /comparar HTTP/1.1");
+    client.println("POST /asistencia_visual HTTP/1.1");
     client.println("Host: " + String(ipActual));
     client.println("Content-Type: multipart/form-data; boundary=" + boundary);
     client.print("Content-Length: ");
@@ -221,7 +226,7 @@ void do_capture() {
     client.write(fb->buf, fb->len);  // La imagen real (bytes)
     client.print(tail);             // Cierre del formulario
 
-    Serial.println("Enviado. Esperando respuesta de Face Recognition...");
+    Serial.println("Enviado. Esperando respuesta de API principal /asistencia_visual...");
 
     // 4. Leer respuesta con timeout extendido (la comparación es lenta)
     unsigned long timeout = millis();
@@ -248,17 +253,29 @@ void do_capture() {
 // ────────────────────────────────────────────────────────────────
 
 void loop() {
-  if (digitalRead(BUTTON_PIN) == LOW) {
-    delay(50);
+  static bool capturaEnProceso = false;
+
+  // Boton con INPUT_PULLUP:
+  // Suelto = HIGH, presionado = LOW
+  if (!capturaEnProceso && digitalRead(BUTTON_PIN) == LOW) {
+    delay(80); // anti-rebote
+
     if (digitalRead(BUTTON_PIN) == LOW) {
+      capturaEnProceso = true;
+
       Serial.println("Boton activado! Capturando...");
       do_capture();
+
+      // Esperar a que se suelte para no tomar muchas fotos seguidas
       while (digitalRead(BUTTON_PIN) == LOW) {
         delay(10);
       }
+
+      delay(120); // anti-rebote al soltar
       Serial.println("Boton liberado. Listo.");
+      capturaEnProceso = false;
     }
   }
+
   delay(10);
 }
-

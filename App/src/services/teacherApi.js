@@ -9,89 +9,140 @@ export const loginUniversal = async (noCuenta, nip = '') => {
       no_cuenta: noCuenta,
       nip: nip,
     });
+
     return response.data;
   } catch (error) {
-    if (error.response) throw new Error(error.response.data.message || 'Error de autenticación');
+    if (error.response) {
+      throw new Error(error.response.data.message || 'Error de autenticación');
+    }
+
     throw new Error('No se pudo conectar al servidor. Verifica la IP en api.js');
   }
 };
 
 /**
- * Obtiene todos los alumnos inscritos en una materia específica.
- * Usada al iniciar la sesión de clase para poblar la lista inicial del Dashboard.
- * @param {string} codigoMateria - Código de la materia
+ * Obtiene alumnos inscritos en una materia específica.
+ * Backend actual:
+ * GET /alumnos/materia/:codigo_materia
  */
 export const obtenerAlumnosMateria = async (codigoMateria) => {
   try {
-    const response = await apiClient.get(`/alumnos/${codigoMateria}`);
+    const response = await apiClient.get(`/alumnos/materia/${codigoMateria}`);
     return response.data;
   } catch (error) {
-    if (error.response) throw new Error(error.response.data.message || 'Error al obtener alumnos');
+    if (error.response) {
+      throw new Error(error.response.data.message || 'Error al obtener alumnos');
+    }
+
     throw new Error('No se pudo conectar al servidor.');
   }
 };
 
 /**
- * Obtiene los alumnos detectados en tiempo real para una sesión activa.
- * Incluye: total_logs, ultima_deteccion, estado_rt (online/idle/offline), proyeccion.
- * Usada por el polling del Dashboard cada 5 segundos.
- * @param {number} idSesion - ID de la sesión activa
+ * Obtiene alumnos activos detectados por BLE en una sesión.
+ * Backend actual:
+ * GET /alumnos_activos/:id_sesion
  */
 export const obtenerAlumnosActivos = async (idSesion) => {
   try {
     const response = await apiClient.get(`/alumnos_activos/${idSesion}`);
     return response.data;
   } catch (error) {
-    if (error.response) throw new Error(error.response.data.message || 'Error al obtener alumnos activos');
+    if (error.response) {
+      throw new Error(error.response.data.message || 'Error al obtener alumnos activos');
+    }
+
     throw new Error('No se pudo conectar al servidor.');
   }
 };
 
 /**
  * Inicia una nueva sesión de clase.
- * Crea un registro en Sesiones_Clase con estado = 'ACTIVA'.
- * @param {string|number} noEmpleado    - Número de empleado del profesor
- * @param {string}        codigoMateria - Código de la materia
+ * Backend actual:
+ * POST /sesion/iniciar
+ *
+ * Body:
+ * {
+ *   no_empleado,
+ *   codigo_materia
+ * }
  */
 export const iniciarSesion = async (noEmpleado, codigoMateria) => {
   try {
-    const response = await apiClient.post('/iniciar_clase', {
+    console.log('POST /sesion/iniciar BODY:', {
       no_empleado: String(noEmpleado),
-      codigo_materia: codigoMateria,
+      codigo_materia: String(codigoMateria),
     });
+
+    const response = await apiClient.post('/sesion/iniciar', {
+      no_empleado: String(noEmpleado),
+      codigo_materia: String(codigoMateria),
+    });
+
+    console.log('POST /sesion/iniciar RESPONSE:', response.data);
+
     return response.data;
   } catch (error) {
-    if (error.response) throw new Error(error.response.data.detail || error.response.data.message || 'Error al iniciar sesión');
+    console.log('POST /sesion/iniciar ERROR:', {
+      status: error?.response?.status,
+      data: error?.response?.data,
+      message: error?.message,
+    });
+
+    if (error.response) {
+      throw new Error(
+        error.response.data.detail ||
+        error.response.data.message ||
+        'Error al iniciar sesión'
+      );
+    }
+
     throw new Error('No se pudo conectar al servidor.');
   }
 };
 
 /**
- * Finaliza la sesión de clase activa del profesor y calcula la asistencia final.
- * El backend identifica la sesión por no_empleado (no por id_sesion).
- * @param {string|number} noEmpleado - Número de empleado del profesor
+ * Finaliza una sesión de clase.
+ * Backend actual:
+ * PUT /sesion/cerrar/:id_sesion
  */
-export const cerrarSesion = async (noEmpleado) => {
+export const cerrarSesion = async (idSesion) => {
   try {
-    const response = await apiClient.post('/finalizar_clase', {
-      no_empleado: String(noEmpleado),
-    });
+    const response = await apiClient.put(`/sesion/cerrar/${idSesion}`);
     return response.data;
   } catch (error) {
-    if (error.response) throw new Error(error.response.data.detail || error.response.data.message || 'Error al cerrar sesión');
+    if (error.response) {
+      throw new Error(
+        error.response.data.detail ||
+        error.response.data.message ||
+        'Error al cerrar sesión'
+      );
+    }
+
     throw new Error('No se pudo conectar al servidor.');
   }
 };
 
 /**
- * Registra un log BLE manualmente (simula lo que hace el ESP32).
- * Solo útil para pruebas sin hardware.
- * @param {string|number} noCuenta - Número de cuenta del alumno
+ * Registra un log BLE manualmente.
+ * Backend actual:
+ * POST /sesion/log
+ *
+ * Body:
+ * {
+ *   id_sesion,
+ *   no_cuenta,
+ *   intensidad_senal,
+ *   fuente
+ * }
  */
-export const registrarLog = async (noCuenta) => {
+export const registrarLog = async (idSesion, noCuenta, intensidadSenal = null) => {
   try {
-    await apiClient.post('/asistencia', {
-      id_alumno: noCuenta.toString(),
+    await apiClient.post('/sesion/log', {
+      id_sesion: idSesion,
+      no_cuenta: noCuenta.toString(),
+      intensidad_senal: intensidadSenal,
+      fuente: 'APP',
     });
   } catch (error) {
     console.warn('[LOG-BLE] Error al registrar log:', error.message);

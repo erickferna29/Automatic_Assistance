@@ -44,29 +44,45 @@ const PhotoCaptureScreen = ({ navigation, route }) => {
   };
 
   const confirmAndUpload = async () => {
-    if (!photoUri) return;
+  if (!photoUri) return;
 
-    setUploading(true);
-    try {
-      // Subir foto al servidor
-      const resultado = await subirFoto(usuario.id, photoUri);
+  const noCuenta = usuario?.no_cuenta || usuario?.noCuenta || usuario?.id;
 
-      if (resultado.success) {
-        // Foto subida exitosamente → ir a Bienvenida
-        navigation.navigate('Welcome', { usuario });
-      } else {
-        Alert.alert('Error', resultado.message || 'No se pudo guardar la foto.');
-      }
-    } catch (error) {
-      Alert.alert(
-        'Error de conexión',
-        error.message + '\n\nVerifica que el servidor esté disponible.',
-      );
-    } finally {
-      setUploading(false);
+  console.log('PHOTO SCREEN DEBUG:', {
+    usuario,
+    noCuenta,
+    photoUri,
+  });
+
+  if (!noCuenta) {
+    Alert.alert('Error', 'No se encontró el número de cuenta del usuario.');
+    return;
+  }
+
+  setUploading(true);
+  try {
+    const resultado = await subirFoto(noCuenta, photoUri);
+
+    if (resultado.success) {
+      navigation.navigate('Welcome', {
+        usuario: {
+          ...usuario,
+          no_cuenta: noCuenta,
+          tiene_foto: true,
+        },
+      });
+    } else {
+      Alert.alert('Error', resultado.message || 'No se pudo guardar la foto.');
     }
-  };
-
+  } catch (error) {
+    Alert.alert(
+      'Error de conexión',
+      error.message + '\n\nVerifica que el servidor esté disponible.',
+    );
+  } finally {
+    setUploading(false);
+  }
+};
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -128,7 +144,7 @@ const PhotoCaptureScreen = ({ navigation, route }) => {
               <Text style={styles.captureHintText}>
                 Usuario:{'\n'}
                 <Text style={styles.captureHintName}>
-                  {usuario?.nombre || 'N/A'}
+                  {usuario?.nombres || usuario?.nombre || usuario?.no_cuenta || 'N/A'}
                 </Text>
               </Text>
             </View>

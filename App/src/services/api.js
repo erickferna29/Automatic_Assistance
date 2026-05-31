@@ -32,7 +32,7 @@ const API_CONFIG = {
    *     (usa la IP local de tu PC en la misma red WiFi)
    *   - Producción: 'https://api.tudominio.com'
    */
-  BASE_URL: 'http://192.168.1.75:8050',
+  BASE_URL: 'http://192.168.43.47:3000',
 
   /**
    * Tiempo máximo de espera para las peticiones (en milisegundos)
@@ -43,7 +43,6 @@ const API_CONFIG = {
    * Headers por defecto para todas las peticiones
    */
   HEADERS: {
-    'Content-Type': 'application/json',
     Accept: 'application/json',
   },
 };
@@ -199,46 +198,68 @@ export const obtenerPerfil = async userId => {
  *   WHERE id = ?;
  * ──────────────────────────────────────────────────────────
  */
-export const subirFoto = async (userId, fotoUri) => {
+export const subirFoto = async (noCuenta, fotoUri) => {
   try {
-    const formData = new FormData();
+    if (!noCuenta) {
+      throw new Error('No se encontró el número de cuenta del usuario.');
+    }
 
-    // Extraer nombre del archivo desde la URI
+    if (!fotoUri) {
+      throw new Error('No se encontró la foto capturada.');
+    }
+
+    console.log('SUBIR FOTO DEBUG:', {
+      noCuenta,
+      fotoUri,
+      baseURL: API_CONFIG.BASE_URL,
+    });
+
+    const formData = new FormData();
     const nombreArchivo = fotoUri.split('/').pop() || 'foto.jpg';
 
-    // Agregar la foto al FormData
-    formData.append('foto', {       // ← 'foto' es el nombre del campo, cámbialo si tu backend usa otro
+    formData.append('foto', {
       uri: fotoUri,
-      type: 'image/jpeg',           // ← Tipo MIME de la imagen
+      type: 'image/jpeg',
       name: nombreArchivo,
     });
 
-    // Agregar el ID del usuario
-    formData.append('usuario_id', userId.toString()); // ← Cambia 'usuario_id' si tu backend usa otro nombre
+    formData.append('no_cuenta', String(noCuenta));
 
-    const response = await apiClient.post(ENDPOINTS.UPLOAD_PHOTO, formData, {
+    // Usamos fetch para multipart en React Native.
+    // No pongas Content-Type aquí: React Native agrega el boundary correcto.
+    const response = await fetch(`${API_CONFIG.BASE_URL}${ENDPOINTS.UPLOAD_PHOTO}`, {
+      method: 'POST',
       headers: {
-        'Content-Type': 'multipart/form-data', // Necesario para subir archivos
+        Accept: 'application/json',
       },
+      body: formData,
     });
 
-    return response.data;
-  } catch (error) {
-    if (error.response) {
-      throw new Error(error.response.data.message || 'Error al subir la foto');
+    const data = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      throw new Error(data?.message || `Error HTTP ${response.status} al subir foto`);
     }
-    throw new Error('No se pudo conectar al servidor.');
+
+    return data;
+  } catch (error) {
+    console.log('ERROR SUBIR FOTO:', {
+      message: error?.message,
+    });
+
+    throw new Error(error?.message || 'No se pudo conectar al servidor.');
   }
 };
 
 /**
  * Registra un nuevo NIP para un alumno existente.
  */
-export const registrarAlumno = async (noCuenta, nip) => {
+export const registrarAlumno = async (noCuenta, nip, nipConfirmacion = nip) => {
   try {
     const response = await apiClient.post('/auth/registro', {
       no_cuenta: noCuenta,
-      nip: nip
+      nip: nip,
+      nip_confirmacion: nipConfirmacion,
     });
     return response.data;
   } catch (error) {

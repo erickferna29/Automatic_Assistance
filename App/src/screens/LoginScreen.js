@@ -41,12 +41,12 @@ const handleLogin = async () => {
       } else if (resultado.tipo === 'alumno') {
         const usuario = resultado.usuario;
         
-        // Si no tiene foto, forzosamente debe ir a registrarla
-        if (!usuario.foto_url) {
-          navigation.navigate('Permissions', { usuario });
-        } else {
-          // Si ya tiene foto, va a la pantalla de emisión Bluetooth
+        // El backend actual devuelve tiene_foto, no foto_url.
+        // Si ya tiene foto, entra directo a emitir BLE.
+        if (usuario.tiene_foto) {
           navigation.navigate('Welcome', { usuario });
+        } else {
+          navigation.navigate('Permissions', { usuario });
         }
       } else {
         Alert.alert('Error', 'Tipo de usuario no reconocido.');

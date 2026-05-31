@@ -39,46 +39,50 @@ const RegisterScreen = ({ navigation }) => {
     return true;
   };
 
-  // ── Registro ──────────────────────────────────────────────────────────────
-  const handleRegistrar = async () => {
-    if (!validar()) return;
+const handleRegistrar = async () => {
+  if (!validar()) return;
 
-    setLoading(true);
-    try {
-      const response = await apiClient.post('/auth/registro', {
-        no_cuenta: noCuenta.trim(),
-        nip: nip.trim(),
-      });
+  setLoading(true);
+  try {
+    const response = await apiClient.post('/auth/registro', {
+      no_cuenta: noCuenta.trim(),
+      nip: nip.trim(),
+      nip_confirmacion: confirmarNip.trim(),
+    });
 
-      const resultado = response.data;
+    const resultado = response.data;
 
-      if (!resultado.success) {
-        Alert.alert('No se pudo registrar', resultado.message || 'Verifica tus datos.');
-        return;
-      }
-
-      // Registro exitoso → ir a permisos para tomar foto
-      Alert.alert(
-        '✅ NIP registrado',
-        'Tu acceso quedó configurado. Ahora tomaremos tu foto de identificación.',
-        [
-          {
-            text: 'Continuar',
-            onPress: () =>
-              navigation.navigate('Permissions', { usuario: resultado.usuario }),
-          },
-        ],
-        { cancelable: false }
-      );
-    } catch (error) {
-      Alert.alert(
-        'Error de conexión',
-        error.message + '\n\nVerifica que el servidor esté disponible.',
-      );
-    } finally {
-      setLoading(false);
+    if (!resultado.success) {
+      Alert.alert('No se pudo registrar', resultado.message || 'Verifica tus datos.');
+      return;
     }
-  };
+
+    Alert.alert(
+  '✅ NIP registrado',
+  'Tu acceso quedó configurado. Ahora tomaremos tu foto de identificación.',
+  [
+    {
+      text: 'Continuar',
+      onPress: () => {
+        navigation.navigate('Permissions', {
+          usuario: {
+            no_cuenta: noCuenta.trim(),
+          },
+        });
+      },
+    },
+  ],
+  { cancelable: false }
+);
+  } catch (error) {
+    Alert.alert(
+      'Error de conexión',
+      error.message + '\n\nVerifica que el servidor esté disponible.',
+    );
+  } finally {
+    setLoading(false);
+  }
+};
 
   // ── UI ────────────────────────────────────────────────────────────────────
   return (

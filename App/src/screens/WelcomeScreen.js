@@ -127,10 +127,9 @@ const WelcomeScreen = ({ navigation, route }) => {
           navigation.navigate('Permissions', { usuario });
           return;
         }
-      }
-
-      const noCuenta = usuario?.no_cuenta || '00000000';
-      const dataBytes = noCuenta.split('').map(Number);
+            }
+      const noCuenta = String(usuario?.no_cuenta || '00000000');
+      const dataBytes = noCuenta.split('').map(d => Number(d));
       const UUID = '1A2B3C4D-5E6F-7A8B-9C0D-1E2F3A4B5C6D';
 
       BLEAdvertiser.setCompanyId(0x00E0);
@@ -188,8 +187,13 @@ const WelcomeScreen = ({ navigation, route }) => {
     );
   };
 
-  const primerNombre = (usuario?.nombre || 'Usuario').split(' ')[0];
+const nombreCompleto = (
+  usuario?.nombre ||
+  `${usuario?.nombres ?? ''} ${usuario?.apellido_paterno ?? ''} ${usuario?.apellido_materno ?? ''}`.trim() ||
+  'Usuario'
+);
 
+const primerNombre = nombreCompleto.split(' ')[0];
   return (
     <View style={styles.container}>
       {/* Header */}

@@ -101,8 +101,18 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation, route }) 
       return;
     }
 
-    const materia = selectedMateria ?? profesor.materias?.[0];
-    if (materia) startSession(profesor.no_empleado, materia.codigo_materia);
+const materia = selectedMateria ?? profesor.materias?.[0];
+
+console.log('DEBUG LEVANTAR SESION DASHBOARD:', {
+  profesor,
+  no_empleado: profesor.no_empleado,
+  materia,
+  codigo_materia: materia?.codigo_materia,
+});
+
+if (materia) {
+  startSession(profesor.no_empleado, materia.codigo_materia);
+}
   };
 
   // Cierra SOLO la sesión de clase — el profesor se queda en el Dashboard

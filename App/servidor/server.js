@@ -33,10 +33,10 @@ app.use(express.json());
 // ============================================================
 const DB_CONFIG = {
   host:     'localhost',
-  port:     3308,                  // Docker mapea 3308 -> 3306
+  port:     3306,                  // Docker mapea 3308 -> 3306
   database: 'Automatic_Asistance',
   user:     'root',
-  password: 'asisT3ncia',
+  password: '1234',
   waitForConnections: true,
   connectionLimit:    10,
 };
@@ -318,7 +318,84 @@ app.post('/sesion/log', async (req, res) => {
     return res.status(500).json({ success: false, message: 'Error al registrar log.' });
   }
 });
+// ============================================================
+//  RUTA: GET /alumnos/materia/:codigo_materia
+//  Lista alumnos inscritos en una materia específica
+//  Usa tabla Alumno_Materia:
+//    id_alumno  -> Alumnos.no_cuenta
+//    id_materia -> Materias.codigo_materia
+// ============================================================
+app.get('/alumnos/materia/:codigo_materia', async (req, res) => {
+  const { codigo_materia } = req.params;
 
+  try {
+    const [rows] = await pool.execute(
+      `SELECT 
+          a.no_cuenta,
+          a.nombres,
+          a.apellido_paterno,
+          a.apellido_materno,
+          a.carrera,
+          a.grupo,
+          a.grado,
+          CASE WHEN a.foto IS NOT NULL THEN 1 ELSE 0 END AS tiene_foto
+       FROM Alumnos a
+       INNER JOIN Alumno_Materia am 
+          ON am.id_alumno = a.no_cuenta
+       WHERE am.id_materia = ?
+       ORDER BY a.apellido_paterno, a.apellido_materno, a.nombres`,
+      [codigo_materia]
+    );
+
+    return res.json({
+      success: true,
+      alumnos: rows,
+    });
+  } catch (err) {
+    console.error('[ALUMNOS-MATERIA] Error:', err.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Error al obtener alumnos de la materia.',
+    });
+  }
+});
+
+// ============================================================
+//  RUTA: GET /alumnos_activos/:id_sesion
+//  Devuelve alumnos detectados por BLE en una sesión activa
+// ============================================================
+app.get('/alumnos_activos/:id_sesion', async (req, res) => {
+  const { id_sesion } = req.params;
+
+  try {
+    const [rows] = await pool.execute(
+      `SELECT 
+          lb.no_cuenta,
+          MAX(lb.fecha_hora) AS ultima_deteccion,
+          COUNT(*) AS total_logs,
+          CASE
+            WHEN MAX(lb.fecha_hora) >= DATE_SUB(NOW(), INTERVAL 20 SECOND) THEN 'online'
+            WHEN MAX(lb.fecha_hora) >= DATE_SUB(NOW(), INTERVAL 2 MINUTE) THEN 'idle'
+            ELSE 'offline'
+          END AS estado_rt
+       FROM Logs_Bluetooth lb
+       WHERE lb.id_sesion = ?
+       GROUP BY lb.no_cuenta`,
+      [id_sesion]
+    );
+
+    return res.json({
+      success: true,
+      alumnos_activos: rows,
+    });
+  } catch (err) {
+    console.error('[ALUMNOS-ACTIVOS] Error:', err.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Error al obtener alumnos activos.',
+    });
+  }
+});
 // ============================================================
 //  RUTA: GET /health
 // ============================================================

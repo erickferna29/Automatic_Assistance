@@ -64,13 +64,13 @@ const PermissionsScreen = ({ navigation, route }) => {
     setLoading(false);
 
     if (btOk && camOk) {
-      // Ambos permisos concedidos → verificamos si ya tiene foto
-      if (!usuario.foto_url) {
-        // No tiene foto (es null), lo mandamos a tomarla
-        navigation.navigate('PhotoCapture', { usuario });
+      // El backend actual devuelve tiene_foto, no foto_url.
+      if (usuario?.tiene_foto) {
+        // Alumno con foto → pantalla de emisión Bluetooth.
+        navigation.navigate('Welcome', { usuario });
       } else {
-        // Ya tiene foto, nos saltamos la cámara y vamos al Dashboard
-        navigation.navigate('Dashboard', { usuario });
+        // Alumno sin foto → tomar foto.
+        navigation.navigate('PhotoCapture', { usuario });
       }
     } else {
       // Al menos uno denegado → pantalla de permisos requeridos
@@ -95,7 +95,7 @@ const PermissionsScreen = ({ navigation, route }) => {
       {/* Contenido */}
       <View style={styles.content}>
         <Text style={styles.greeting}>Hola,</Text>
-        <Text style={styles.userName}>{usuario?.nombre || 'Usuario'}</Text>
+        <Text style={styles.userName}>{usuario?.nombres || usuario?.nombre || 'Usuario'}</Text>
 
         <View style={styles.iconBig}>
           <Text style={styles.iconBigEmoji}>🛡️</Text>

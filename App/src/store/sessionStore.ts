@@ -1,5 +1,10 @@
 import { create } from 'zustand';
-import { obtenerAlumnosMateria, obtenerAlumnosActivos, iniciarSesion, cerrarSesion } from '../services/teacherApi';
+import {
+  obtenerAlumnosMateria,
+  obtenerAlumnosActivos,
+  iniciarSesion,
+  cerrarSesion,
+} from '../services/teacherApi';
 import type { SessionStore, Student, SignalStatus } from '../types';
 
 // Intervalo de polling en ms (5 segundos)
@@ -28,7 +33,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   // ─── Polling ────────────────────────────────────────────────────────────────
 
   _startPolling: () => {
-    // Limpiar timer previo si existe
     const prevTimer = get()._pollingTimer;
     if (prevTimer) clearInterval(prevTimer);
 
@@ -49,8 +53,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   /**
    * Refresca la lista de alumnos detectados desde el backend.
-   * Actualiza el estado de cada alumno (online/idle/offline) basado en
-   * la última detección BLE reportada por el servidor.
+   * Si tu backend aún no tiene /alumnos_activos/:idSesion,
+   * este error queda silencioso para no romper la pantalla.
    */
   refreshActiveStudents: async () => {
     const { id_sesion, students, studentIds } = get();
@@ -61,12 +65,14 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       if (!data.success) return;
 
       const activosMap: Record<string, any> = {};
-      for (const al of data.alumnos_activos) {
-        activosMap[al.no_cuenta] = al;
+      const listaActivos = data.alumnos_activos ?? [];
+
+      for (const al of listaActivos) {
+        activosMap[String(al.no_cuenta)] = al;
       }
 
-      // Actualizar estado de cada alumno conocido
       const updatedStudents: Record<string, Student> = {};
+
       for (const id of studentIds) {
         const existing = students[id];
         const activo = activosMap[id];
@@ -80,7 +86,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
               : existing?.lastSignalAt ?? null,
           };
         } else {
-          // No detectado en esta sesión → sin señal
           updatedStudents[id] = {
             ...existing,
             status: 'offline' as SignalStatus,
@@ -90,7 +95,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
       set({ students: updatedStudents });
     } catch (err) {
-      // Errores de polling son silenciosos para no interrumpir la UX
       console.warn('[Polling] Error al refrescar alumnos activos:', err);
     }
   },
@@ -99,23 +103,36 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   startSession: async (noEmpleado: number, codigoMateria: string) => {
     set({ isLoading: true, error: null });
+
     try {
       // 1. Crear sesión en el backend
       const res = await iniciarSesion(noEmpleado, codigoMateria);
-      if (res.status !== 'success') throw new Error(res.message || 'Error al iniciar sesión.');
 
-      // 2. Cargar lista completa de alumnos inscritos en la materia
+      // Tu backend actual responde: { success: true, id_sesion: 3 }
+      if (!res.success) {
+        throw new Error(res.message || 'Error al iniciar sesión.');
+      }
+
+      // 2. Cargar lista completa de alumnos
       const alumnosData = await obtenerAlumnosMateria(codigoMateria);
-      let initialStudents: Record<string, Student> = {};
-      let ids: string[] = [];
+
+      const initialStudents: Record<string, Student> = {};
+      const ids: string[] = [];
 
       const lista = alumnosData?.alumnos ?? (Array.isArray(alumnosData) ? alumnosData : []);
+
       lista.forEach((student: any) => {
-        const id = (student.no_cuenta || student.id).toString();
+        const id = String(student.no_cuenta || student.id);
+
         ids.push(id);
+
         initialStudents[id] = {
           id,
-          name: student.nombre || student.name || id,
+          name:
+            student.nombre ||
+            student.name ||
+            `${student.nombres ?? ''} ${student.apellido_paterno ?? ''} ${student.apellido_materno ?? ''}`.trim() ||
+            id,
           lastSignalAt: null,
           status: 'offline',
           grupo: student.grupo ?? '',
@@ -137,21 +154,23 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
       // 3. Iniciar polling para actualizar estados en tiempo real
       get()._startPolling();
-
     } catch (err: any) {
-      set({ isLoading: false, error: err.message });
+      set({
+        isLoading: false,
+        error: err?.message || 'Error al iniciar sesión.',
+      });
     }
   },
 
   endSession: async () => {
-    const { noEmpleado } = get();
+    const { id_sesion } = get();
 
     // Detener polling antes de cerrar
     get()._stopPolling();
 
-    if (noEmpleado) {
+    if (id_sesion) {
       try {
-        await cerrarSesion(noEmpleado);
+        await cerrarSesion(id_sesion);
       } catch (err: any) {
         console.warn('[endSession] Error al cerrar sesión en backend:', err.message);
       }
@@ -165,6 +184,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       studentIds: [],
       students: {},
       error: null,
+      isLoading: false,
     });
   },
 }));

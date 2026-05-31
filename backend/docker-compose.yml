@@ -1,17 +1,37 @@
-name: sistema_asistencia_esp32
+name: sistema_asistencia_unificado
+
 services:
   db_asistencia:
     image: mariadb:10.11
-    container_name: Asistencia_db
+    container_name: Asistencias_db
     environment:
-      MYSQL_ROOT_PASSWORD: asisT3ncia
+      MYSQL_ROOT_PASSWORD: 1234
       MYSQL_DATABASE: Automatic_Asistance
     ports:
-      - "3308:3306" 
+      - "3306:3306"
     volumes:
       - asistencia_db_data:/var/lib/mysql
-      - ./Database:/docker-entrypoint-initdb.d
+      # Esto inyecta el SQL de tu compa para que MariaDB cree las tablas solito al arrancar
+      - ./Database:/docker-entrypoint-initdb.d 
 
+  api_principal:
+    build: .
+    container_name: Asistencia_main
+    ports:
+      - "8050:8050"
+    depends_on:
+      - db_asistencia
+      - face_recognition
+
+  face_recognition:
+    build: ./face_service
+    container_name: Asistencia_face
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./fotos_alumnos:/app/fotos_alumnos
+    depends_on:
+      - db_asistencia
   pma_asistencia:
     image: phpmyadmin/phpmyadmin
     container_name: Asistencia_pma
@@ -38,17 +58,5 @@ services:
       - db_asistencia
     command: >
       bash -c "docker-php-ext-install mysqli && apache2-foreground"
-
-  face_recognition:
-      build: ./face_service
-      container_name: Asistencia_face
-      restart: always
-      ports:
-        - "5001:5001"
-      volumes:
-        - ./fotos_alumnos:/app/fotos_alumnos  
-        - ./temp_captures:/app/temp_captures     
-      depends_on:
-        - db_asistencia
 volumes:
-  asistencia_db_data: 
+  asistencia_db_data:

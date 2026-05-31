@@ -31,9 +31,27 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 //const char* password = "PF3hx2bADE";
 //const char *ipActual = "192.168.1.90";
 
-const char* ssid     = "TELCEL_B320_BE2F";
-const char* password = "B7YmHt53M35";
-const char *ipActual = "192.168.8.1";
+//const char* ssid     = "LL2004_2.4";
+//const char* password = "Ab982076522";
+//const char *ipActual = "192.168.1.196";
+
+
+//const char* ssid     = "INFINITUM5DE6_2.4";
+//const char* password = "Mp7FhGKrRs";
+//const char *ipActual = "192.168.1.75";
+
+//const char *ssid     = "Biblioteca";
+//const char *password = "Bibliotecazn";
+//const char *ipActual = "192.168.0.59";
+
+/// ─────────────────
+//const char *ssid     = "UniversoSoriana 4G";
+//const char *password = "ba982076522+";
+//const char *ipActual = "192.168.1.122";
+
+const char *ssid     = "J7";
+const char *password = "Fernando";
+const char *ipActual = "192.168.43.47";
 int server_port = 8050;
 
 // ===========================
@@ -45,6 +63,7 @@ BLEScan* pBLEScan = nullptr;
 String uuid_secreto = "0000abcd-0000-1000-8000-00805f9b34fb";
 String url_asistencia = "http://" + String(ipActual) + ":" + String(server_port) + "/asistencia";
 String url_estado = "http://" + String(ipActual) + ":" + String(server_port) + "/estado_clase";
+String url_evento_visual = "http://" + String(ipActual) + ":" + String(server_port) + "/evento_visual";
 
 // ===========================
 // VARIABLES GLOBALES
@@ -55,6 +74,11 @@ int alumnosPresentes = -1;
 
 unsigned long ultimoChequeoEstado = 0;
 unsigned long intervaloChequeo = 0;
+unsigned long ultimoChequeoVisual = 0;
+const unsigned long intervaloChequeoVisual = 500;
+int ultimoEventoVisualMostrado = 0;
+String mensajeVisual = "";
+String cuentaVisual = "";
 
 // ===========================
 // CALLBACK BLE
@@ -69,30 +93,37 @@ void onResult(BLEAdvertisedDevice advertisedDevice) { }
 void actualizarPantalla(String materia, int total, String mensajeInfo) {
 display.clearDisplay();
 
-String horaActual = "10:45";
-
 Serial.println("\n[--- PANTALLA OLED ---]");
-Serial.println("Hora       : " + horaActual);
 Serial.println("Materia    : " + materia);
 Serial.println("Asistencia : " + String(total));
 Serial.println("Estado     : " + mensajeInfo);
+Serial.println("Visual     : " + mensajeVisual);
 Serial.println("-----------------------\n");
 
 display.setTextSize(1);
 display.setTextColor(SSD1306_WHITE);
 
+// Se quito la hora y todo se recorrio hacia arriba.
 display.setCursor(0, 0);
-display.println("Hora: " + horaActual);
-
-display.setCursor(0, 15);
 display.println("Materia:");
 display.println(materia);
 
-display.setCursor(0, 40);
+display.setCursor(0, 19);
 display.println("Asistencia: " + String(total));
 
-display.setCursor(0, 55);
+display.setCursor(0, 30);
 display.println(mensajeInfo);
+
+// Area reservada para la deteccion por camara.
+// El mensaje de alumno se parte en dos lineas porque no cabe completo
+// en los 128 pixeles de ancho de la OLED.
+display.setCursor(0, 46);
+if (mensajeVisual == "ALUMNO") {
+  display.println("Alumno (" + cuentaVisual + ")");
+  display.println("encontrado");
+} else if (mensajeVisual == "NO_RECONOCIDO") {
+  display.println("Rostro no reconocido");
+}
 
 display.display();
 }
@@ -172,6 +203,46 @@ http.end();
 }
 
 // ===========================
+// CONSULTAR RESULTADO DE LA CAMARA
+// ===========================
+void verificarEventoVisual() {
+if (WiFi.status() != WL_CONNECTED) return;
+
+HTTPClient http;
+http.begin(url_evento_visual);
+http.setTimeout(1000);
+
+int httpResponseCode = http.GET();
+if (httpResponseCode > 0) {
+  String payload = http.getString();
+  DynamicJsonDocument doc(384);
+  DeserializationError error = deserializeJson(doc, payload);
+
+  if (!error) {
+    int eventoId = doc["evento_id"] | 0;
+    if (eventoId > 0 && eventoId != ultimoEventoVisualMostrado) {
+      ultimoEventoVisualMostrado = eventoId;
+      String tipo = doc["tipo"] | "";
+
+      if (tipo == "success") {
+        cuentaVisual = String((const char*) doc["no_cuenta"]);
+        mensajeVisual = "ALUMNO";
+      } else {
+        cuentaVisual = "";
+        mensajeVisual = "NO_RECONOCIDO";
+      }
+
+      String estadoPantalla = claseActiva ? "Clase activa" : "Esperando clase";
+      actualizarPantalla(claseActiva ? materiaActual : "Sin clase",
+                         claseActiva ? alumnosPresentes : 0,
+                         estadoPantalla);
+    }
+  }
+}
+http.end();
+}
+
+// ===========================
 // ENVIAR ASISTENCIA
 // ===========================
 void enviarAsistencia(String idAlumno) {
@@ -221,6 +292,7 @@ if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
 Serial.println("No se encontro pantalla OLED");
 while (true);
 }
+display.setRotation(2);
 
 display.clearDisplay();
 display.display();
@@ -251,6 +323,11 @@ void loop() {
 if (millis() - ultimoChequeoEstado >= intervaloChequeo) {
 ultimoChequeoEstado = millis();
 verificarEstadoClase();
+}
+
+if (millis() - ultimoChequeoVisual >= intervaloChequeoVisual) {
+ultimoChequeoVisual = millis();
+verificarEventoVisual();
 }
 
 // ===========================
